@@ -1,0 +1,470 @@
+const STORAGE_KEY = 'energizers-rms-state-v1';
+
+function makeId(prefix) {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function round2(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function round4(value) {
+  return Math.round((Number(value) || 0) * 10000) / 10000;
+}
+
+export function normalizeName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeMatch(value) {
+  return normalizeName(value).toLowerCase();
+}
+
+export function normalizeTenrox(value) {
+  const normalized = normalizeName(value);
+  return normalized || 'N/A';
+}
+
+export function normalizeRegion(value) {
+  const normalized = normalizeMatch(value);
+  if (normalized === 'india') return 'India';
+  if (normalized === 'usa' || normalized === 'us' || normalized === 'united states') return 'USA';
+  if (normalized === 'europe' || normalized === 'eu') return 'Europe';
+  return 'Unknown';
+}
+
+function defaultState() {
+  return {
+    resources: [],
+    programs: [],
+    allocations: [],
+    previewRows: [],
+    config: {
+      id: 'config',
+      total_resources: '',
+      monthly_hours: '',
+    },
+  };
+}
+
+export function readState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    return {
+      ...defaultState(),
+      ...parsed,
+      config: { ...defaultState().config, ...(parsed.config || {}) },
+      resources: Array.isArray(parsed.resources) ? parsed.resources : [],
+      programs: Array.isArray(parsed.programs) ? parsed.programs : [],
+      allocations: Array.isArray(parsed.allocations) ? parsed.allocations : [],
+      previewRows: Array.isArray(parsed.previewRows) ? parsed.previewRows : [],
+    };
+  } catch {
+    return defaultState();
+  }
+}
+
+export function writeState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  return state;
+}
+
+function findResourceByName(state, name) {
+  const lookup = normalizeMatch(name);
+  return state.resources.find((resource) => normalizeMatch(resource.name) === lookup) || null;
+}
+
+function findProgramByName(state, name) {
+  const lookup = normalizeMatch(name);
+  return state.programs.find((program) => normalizeMatch(program.name) === lookup) || null;
+}
+
+function findProgramByTenrox(state, tenroxCode) {
+  const lookup = normalizeTenrox(tenroxCode).toLowerCase();
+  return state.programs.find((program) => normalizeTenrox(program.tenrox_code).toLowerCase() === lookup) || null;
+}
+
+function sortResources(resources) {
+  return [...resources].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function sortPrograms(programs) {
+  return [...programs].sort((left, right) => {
+    const nameComparison = left.name.localeCompare(right.name);
+    if (nameComparison !== 0) return nameComparison;
+    return normalizeTenrox(left.tenrox_code).localeCompare(normalizeTenrox(right.tenrox_code));
+  });
+}
+
+function computeAllocation(storyPoints) {
+  return round4((Number(storyPoints) || 0) * 0.1);
+}
+
+function computeHours(storyPoints, monthlyHours) {
+  return round2(computeAllocation(storyPoints) * (Number(monthlyHours) || 0));
+}
+
+function formatAllocationSummaryValue(value) {
+  return Number(round4(value).toFixed(2)).toString();
+}
+
+function ensureResourceCapacity(state, resourceId, nextAllocations, excludedAllocationId = null) {
+  const resource = state.resources.find((item) => item.id === resourceId);
+  const maxCapacity = Number.isFinite(Number(resource?.max_capacity)) ? Number(resource.max_capacity) : 1;
+  const totalAllocation = nextAllocations
+    .filter((allocation) => allocation.resource_id === resourceId && allocation.id !== excludedAllocationId)
+    .reduce((sum, allocation) => sum + computeAllocation(allocation.story_points), 0);
+
+  if (round4(totalAllocation) > round4(maxCapacity)) {
+    throw new Error(`${resource?.name || 'Resource'} exceeds maximum capacity of ${formatAllocationSummaryValue(maxCapacity)}.`);
+  }
+}
+
+function ensureNoOrphans(state, resourceId, programId) {
+  if (!state.resources.some((resource) => resource.id === resourceId)) {
+    throw new Error('Resource must exist before allocation.');
+  }
+  if (!state.programs.some((program) => program.id === programId)) {
+    throw new Error('Program must exist before allocation.');
+  }
+}
+
+function upsertResourceRecord(state, { name, region, max_capacity = 1 }, { updateExisting = true } = {}) {
+  const normalizedName = normalizeName(name);
+  if (!normalizedName) throw new Error('Resource name is required.');
+  const normalizedRegion = normalizeRegion(region);
+  const existing = findResourceByName(state, normalizedName);
+
+  if (existing) {
+    if (updateExisting) {
+      existing.name = normalizedName;
+      existing.region = normalizedRegion;
+      existing.max_capacity = max_capacity;
+    }
+    return existing;
+  }
+
+  const resource = {
+    id: makeId('resource'),
+    name: normalizedName,
+    region: normalizedRegion,
+    max_capacity,
+  };
+  state.resources.push(resource);
+  return resource;
+}
+
+function upsertProgramRecord(state, { name, tenrox_code }, { updateExisting = true, allowUnknownComposite = false } = {}) {
+  const normalizedName = normalizeName(name);
+  const normalizedTenrox = normalizeTenrox(tenrox_code);
+  if (!normalizedName) throw new Error('Program name is required.');
+
+  let existing = findProgramByName(state, normalizedName);
+  if (
+    allowUnknownComposite &&
+    normalizedName === 'Unknown' &&
+    normalizedTenrox !== 'N/A'
+  ) {
+    existing = state.programs.find((program) => program.name === 'Unknown' && normalizeTenrox(program.tenrox_code) === normalizedTenrox) || existing;
+  }
+
+  if (existing) {
+    if (updateExisting) {
+      existing.name = normalizedName;
+      existing.tenrox_code = normalizedTenrox;
+    }
+    return existing;
+  }
+
+  const program = {
+    id: makeId('program'),
+    name: normalizedName,
+    tenrox_code: normalizedTenrox,
+  };
+  state.programs.push(program);
+  return program;
+}
+
+function resolveProgramForImport(state, rawProgram, rawTenroxCode) {
+  const normalizedProgram = normalizeName(rawProgram);
+  const normalizedTenrox = normalizeTenrox(rawTenroxCode);
+  const byName = normalizedProgram ? findProgramByName(state, normalizedProgram) : null;
+  if (byName) {
+    return { name: byName.name, tenrox_code: normalizeTenrox(byName.tenrox_code || normalizedTenrox) };
+  }
+  const byTenrox = normalizedTenrox !== 'N/A' ? findProgramByTenrox(state, normalizedTenrox) : null;
+  if (byTenrox) {
+    return { name: byTenrox.name, tenrox_code: normalizeTenrox(byTenrox.tenrox_code) };
+  }
+  return { name: 'Unknown', tenrox_code: normalizedTenrox };
+}
+
+function createResolvedAllocation(state, allocation) {
+  const resource = state.resources.find((item) => item.id === allocation.resource_id);
+  const program = state.programs.find((item) => item.id === allocation.program_id);
+  const monthlyHours = Number(state.config.monthly_hours) || 0;
+  const allocationPercentage = computeAllocation(allocation.story_points);
+
+  return {
+    ...allocation,
+    resource_name: resource?.name || 'Unknown',
+    region: resource?.region || 'Unknown',
+    program_name: program?.name || 'Unknown',
+    tenrox_code: normalizeTenrox(program?.tenrox_code),
+    allocation_percentage: allocationPercentage,
+    hours: round2(allocationPercentage * monthlyHours),
+  };
+}
+
+function generateProgramResourceSummary(programId, allocations) {
+  return allocations
+    .filter((allocation) => allocation.program_id === programId)
+    .sort((left, right) => right.allocation_percentage - left.allocation_percentage || left.resource_name.localeCompare(right.resource_name))
+    .map((allocation) => `${allocation.resource_name} (${formatAllocationSummaryValue(allocation.allocation_percentage)})`)
+    .join(', ');
+}
+
+export function buildDashboard(state) {
+  const monthlyHours = Number(state.config.monthly_hours) || 0;
+  const totalResources = Number(state.config.total_resources) || 0;
+  const allocations = state.allocations.map((allocation) => createResolvedAllocation(state, allocation));
+  const usedCapacity = round4(allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0));
+  const remainingCapacity = round4(totalResources - usedCapacity);
+
+  const resourceUtilization = sortResources(state.resources).map((resource) => {
+    const resourceAllocations = allocations.filter((allocation) => allocation.resource_id === resource.id);
+    const totalAllocation = round4(resourceAllocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0));
+    const maxCapacity = Number.isFinite(Number(resource.max_capacity)) ? Number(resource.max_capacity) : 1;
+    return {
+      ...resource,
+      allocation_percentage: totalAllocation,
+      remaining_capacity: round4(Math.max(0, maxCapacity - totalAllocation)),
+      allocated_hours: round2(totalAllocation * monthlyHours),
+      allocations: resourceAllocations,
+    };
+  });
+
+  const programSummary = sortPrograms(state.programs).map((program) => {
+    const programAllocations = allocations.filter((allocation) => allocation.program_id === program.id);
+    const regionTotal = (region) => round4(
+      programAllocations
+        .filter((allocation) => allocation.region === region)
+        .reduce((sum, allocation) => sum + allocation.allocation_percentage, 0),
+    );
+    const totalProgramResources = round4(programAllocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0));
+    return {
+      ...program,
+      india_resources: regionTotal('India'),
+      usa_resources: regionTotal('USA'),
+      europe_resources: regionTotal('Europe'),
+      total_program_resources: totalProgramResources,
+      percent_of_total_resources: totalResources > 0 ? round4(totalProgramResources / totalResources) : 0,
+      resource_allocation_summary: generateProgramResourceSummary(program.id, allocations),
+    };
+  });
+
+  return {
+    planning_period: {
+      total_hours: monthlyHours,
+    },
+    config: state.config,
+    totals: {
+      total_resources: totalResources,
+      monthly_hours: monthlyHours,
+      total_capacity_hours: round2(totalResources * monthlyHours),
+      used_capacity: usedCapacity,
+      used_capacity_hours: round2(usedCapacity * monthlyHours),
+      remaining_capacity: remainingCapacity,
+      remaining_capacity_hours: round2(remainingCapacity * monthlyHours),
+    },
+    resource_utilization: resourceUtilization,
+    program_summary: programSummary,
+    allocations,
+  };
+}
+
+export function importResourcesRows(state, rows) {
+  let imported = 0;
+  rows.forEach((row) => {
+    const name = normalizeName(row['Resource Name'] ?? row.resource_name ?? row.ResourceName ?? row.name);
+    if (!name) return;
+    const region = normalizeRegion(row.Region ?? row.region);
+    upsertResourceRecord(state, { name, region, max_capacity: 1 }, { updateExisting: true });
+    imported += 1;
+  });
+  return imported;
+}
+
+export function importProgramsRows(state, rows) {
+  let imported = 0;
+  rows.forEach((row) => {
+    const name = normalizeName(row['Program Name'] ?? row.program_name ?? row.ProgramName ?? row.name);
+    if (!name) return;
+    const tenrox_code = normalizeTenrox(row['Tenrox Code'] ?? row['Tenrox Project ID'] ?? row.tenrox_code);
+    upsertProgramRecord(state, { name, tenrox_code }, { updateExisting: true });
+    imported += 1;
+  });
+  return imported;
+}
+
+function readAzureValue(row, aliases) {
+  const keys = Object.keys(row);
+  const key = keys.find((candidate) => aliases.includes(candidate.trim().toLowerCase()));
+  return key ? row[key] : '';
+}
+
+export function previewAzureImport(state, rows) {
+  const monthlyHours = Number(state.config.monthly_hours) || 0;
+  const previewRows = rows.flatMap((row) => {
+    const assignedTo = normalizeName(readAzureValue(row, ['assigned to', 'assigned_to', 'assignedto']));
+    const rawStoryPoints = readAzureValue(row, ['story points', 'story_points', 'storypoints']);
+    const storyPoints = Number(rawStoryPoints);
+    const rawProgram = normalizeName(readAzureValue(row, ['program', 'program / area', 'area']));
+    const tenroxCode = normalizeTenrox(readAzureValue(row, ['tenrox project id', 'tenrox code', 'tenroxcode', 'tenrox_project_id']));
+
+    if (!assignedTo || String(rawStoryPoints).trim() === '' || !Number.isFinite(storyPoints) || storyPoints <= 0) return [];
+
+    const resolvedProgram = resolveProgramForImport(state, rawProgram, tenroxCode);
+    const allocationPercentage = computeAllocation(storyPoints);
+
+    return [{
+      id: makeId('preview'),
+      assigned_to: assignedTo,
+      story_points: storyPoints,
+      program: resolvedProgram.name,
+      tenrox_code: resolvedProgram.tenrox_code,
+      allocation_percentage: allocationPercentage,
+      hours: round2(allocationPercentage * monthlyHours),
+    }];
+  });
+
+  state.previewRows = previewRows;
+  return previewRows;
+}
+
+function mergeAllocation(state, payload, existingId = null) {
+  const resourceId = payload.resource_id;
+  const programId = payload.program_id;
+  const storyPoints = Number(payload.story_points);
+
+  if (!Number.isFinite(storyPoints) || storyPoints <= 0) {
+    throw new Error('Story points must be greater than 0.');
+  }
+
+  ensureNoOrphans(state, resourceId, programId);
+
+  const duplicate = state.allocations.find(
+    (allocation) => allocation.resource_id === resourceId && allocation.program_id === programId && allocation.id !== existingId,
+  );
+
+  let nextAllocations = state.allocations.map((allocation) => ({ ...allocation }));
+  let savedId = existingId;
+
+  if (existingId) {
+    nextAllocations = nextAllocations.filter((allocation) => allocation.id !== existingId);
+  }
+
+  if (duplicate) {
+    nextAllocations = nextAllocations.map((allocation) => {
+      if (allocation.id !== duplicate.id) return allocation;
+      return {
+        ...allocation,
+        story_points: round4(Number(allocation.story_points) + storyPoints),
+      };
+    });
+    savedId = duplicate.id;
+  } else {
+    savedId = existingId || makeId('allocation');
+    nextAllocations.push({
+      id: savedId,
+      resource_id: resourceId,
+      program_id: programId,
+      story_points: round4(storyPoints),
+    });
+  }
+
+  ensureResourceCapacity(state, resourceId, nextAllocations);
+  if (existingId) {
+    const previous = state.allocations.find((allocation) => allocation.id === existingId);
+    if (previous && previous.resource_id !== resourceId) {
+      ensureResourceCapacity(state, previous.resource_id, nextAllocations);
+    }
+  }
+
+  state.allocations = nextAllocations;
+  return state.allocations.find((allocation) => allocation.id === savedId);
+}
+
+export function createAllocationRecord(state, payload) {
+  return mergeAllocation(state, payload);
+}
+
+export function updateAllocationRecord(state, id, payload) {
+  const existing = state.allocations.find((allocation) => allocation.id === id);
+  if (!existing) throw new Error('Allocation not found.');
+  return mergeAllocation(state, {
+    resource_id: payload.resource_id,
+    program_id: payload.program_id,
+    story_points: Number(payload.story_points),
+  }, id);
+}
+
+export function deleteAllocationRecord(state, id) {
+  state.allocations = state.allocations.filter((allocation) => allocation.id !== id);
+}
+
+export function commitPreviewRows(state) {
+  const committed = [];
+
+  state.previewRows.forEach((preview) => {
+    let resource = findResourceByName(state, preview.assigned_to);
+    if (!resource) {
+      resource = upsertResourceRecord(state, { name: preview.assigned_to, region: 'Unknown', max_capacity: 1 }, { updateExisting: false });
+    }
+
+    const program = upsertProgramRecord(
+      state,
+      { name: preview.program || 'Unknown', tenrox_code: preview.tenrox_code || 'N/A' },
+      { updateExisting: preview.program !== 'Unknown', allowUnknownComposite: true },
+    );
+
+    committed.push(createAllocationRecord(state, {
+      resource_id: resource.id,
+      program_id: program.id,
+      story_points: Number(preview.story_points),
+    }));
+  });
+
+  state.previewRows = [];
+  return committed;
+}
+
+export function updateConfigRecord(state, payload) {
+  state.config = {
+    ...state.config,
+    total_resources: payload.total_resources === '' ? '' : round4(payload.total_resources),
+    monthly_hours: payload.monthly_hours === '' ? '' : round2(payload.monthly_hours),
+  };
+  return state.config;
+}
+
+export function createResourceRecord(state, payload) {
+  return upsertResourceRecord(state, payload, { updateExisting: true });
+}
+
+export function createProgramRecord(state, payload) {
+  return upsertProgramRecord(state, payload, { updateExisting: true });
+}
+
+export function listResources(state) {
+  return sortResources(state.resources);
+}
+
+export function listPrograms(state) {
+  return sortPrograms(state.programs);
+}
