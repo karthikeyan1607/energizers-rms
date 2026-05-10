@@ -147,7 +147,7 @@ function MasterDataImportPanel() {
         <label className="flex min-h-24 cursor-pointer items-center justify-between gap-4 rounded-lg border border-line bg-frost p-4">
           <div>
             <div className="font-semibold">Resources File</div>
-            <div className="text-sm text-graphite">Resource Name, Region</div>
+            <div className="text-sm text-graphite">Resource Name, Email, Region</div>
           </div>
           <span className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white"><Upload size={16} /> Upload</span>
           <input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importResources(e.target.files[0])} />

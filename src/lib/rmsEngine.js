@@ -23,6 +23,26 @@ function normalizeMatch(value) {
   return normalizeName(value).toLowerCase();
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function firstNameOnly(value) {
+  return normalizeName(value).split(' ')[0] || '';
+}
+
+function parseAssignedTo(value) {
+  const raw = normalizeName(value);
+  const emailMatch = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const email = normalizeEmail(emailMatch?.[0] || '');
+  const name = normalizeName(raw.replace(/[<\[\(]?[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}[>\]\)]?/gi, ''));
+  return {
+    raw,
+    email,
+    name,
+  };
+}
+
 export function normalizeTenrox(value) {
   const normalized = normalizeName(value);
   return normalized || 'N/A';
@@ -77,6 +97,17 @@ export function writeState(state) {
 function findResourceByName(state, name) {
   const lookup = normalizeMatch(name);
   return state.resources.find((resource) => normalizeMatch(resource.name) === lookup) || null;
+}
+
+function findResourceByEmail(state, email) {
+  const lookup = normalizeEmail(email);
+  if (!lookup) return null;
+  return state.resources.find((resource) => normalizeEmail(resource.email) === lookup) || null;
+}
+
+function findResourceForAssignedTo(state, assignedToValue) {
+  const parsed = parseAssignedTo(assignedToValue);
+  return findResourceByEmail(state, parsed.email) || findResourceByName(state, parsed.name || parsed.raw) || null;
 }
 
 function findProgramByName(state, name) {
@@ -134,15 +165,17 @@ function ensureNoOrphans(state, resourceId, programId) {
   }
 }
 
-function upsertResourceRecord(state, { name, region, max_capacity = 1 }, { updateExisting = true } = {}) {
+function upsertResourceRecord(state, { name, email, region, max_capacity = 1 }, { updateExisting = true } = {}) {
   const normalizedName = normalizeName(name);
   if (!normalizedName) throw new Error('Resource name is required.');
+  const normalizedEmail = normalizeEmail(email);
   const normalizedRegion = normalizeRegion(region);
-  const existing = findResourceByName(state, normalizedName);
+  const existing = findResourceByEmail(state, normalizedEmail) || findResourceByName(state, normalizedName);
 
   if (existing) {
     if (updateExisting) {
       existing.name = normalizedName;
+      existing.email = normalizedEmail;
       existing.region = normalizedRegion;
       existing.max_capacity = max_capacity;
     }
@@ -152,6 +185,7 @@ function upsertResourceRecord(state, { name, region, max_capacity = 1 }, { updat
   const resource = {
     id: makeId('resource'),
     name: normalizedName,
+    email: normalizedEmail,
     region: normalizedRegion,
     max_capacity,
   };
@@ -225,7 +259,7 @@ function generateProgramResourceSummary(programId, allocations) {
   return allocations
     .filter((allocation) => allocation.program_id === programId)
     .sort((left, right) => right.allocation_percentage - left.allocation_percentage || left.resource_name.localeCompare(right.resource_name))
-    .map((allocation) => `${allocation.resource_name} (${formatAllocationSummaryValue(allocation.allocation_percentage)})`)
+    .map((allocation) => `${firstNameOnly(allocation.resource_name)} (${formatAllocationSummaryValue(allocation.allocation_percentage)})`)
     .join(', ');
 }
 
@@ -293,8 +327,9 @@ export function importResourcesRows(state, rows) {
   rows.forEach((row) => {
     const name = normalizeName(row['Resource Name'] ?? row.resource_name ?? row.ResourceName ?? row.name);
     if (!name) return;
+    const email = normalizeEmail(row.Email ?? row.email);
     const region = normalizeRegion(row.Region ?? row.region);
-    upsertResourceRecord(state, { name, region, max_capacity: 1 }, { updateExisting: true });
+    upsertResourceRecord(state, { name, email, region, max_capacity: 1 }, { updateExisting: true });
     imported += 1;
   });
   return imported;
@@ -331,10 +366,14 @@ export function previewAzureImport(state, rows) {
 
     const resolvedProgram = resolveProgramForImport(state, rawProgram, tenroxCode);
     const allocationPercentage = computeAllocation(storyPoints);
+    const matchedResource = findResourceForAssignedTo(state, assignedTo);
+    const parsedAssignedTo = parseAssignedTo(assignedTo);
 
     return [{
       id: makeId('preview'),
-      assigned_to: assignedTo,
+      assigned_to: matchedResource?.name || parsedAssignedTo.name || parsedAssignedTo.raw,
+      assigned_to_email: matchedResource?.email || parsedAssignedTo.email || '',
+      raw_assigned_to: assignedTo,
       story_points: storyPoints,
       program: resolvedProgram.name,
       tenrox_code: resolvedProgram.tenrox_code,
@@ -422,9 +461,14 @@ export function commitPreviewRows(state) {
   const committed = [];
 
   state.previewRows.forEach((preview) => {
-    let resource = findResourceByName(state, preview.assigned_to);
+    let resource = findResourceByEmail(state, preview.assigned_to_email) || findResourceByName(state, preview.assigned_to);
     if (!resource) {
-      resource = upsertResourceRecord(state, { name: preview.assigned_to, region: 'Unknown', max_capacity: 1 }, { updateExisting: false });
+      resource = upsertResourceRecord(state, {
+        name: preview.assigned_to,
+        email: preview.assigned_to_email,
+        region: 'Unknown',
+        max_capacity: 1,
+      }, { updateExisting: false });
     }
 
     const program = upsertProgramRecord(
