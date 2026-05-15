@@ -4,6 +4,9 @@ import { api } from './api.js';
 import { useRmsStore } from './store.js';
 import { num, pct } from './lib/format.js';
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const YEAR_OPTIONS = Array.from({ length: 11 }, (_, index) => 2026 + index);
+
 function Stat({ label, value, subtext }) {
   return (
     <div className="rounded-lg border border-line bg-white p-4">
@@ -98,10 +101,14 @@ function ConfigBar() {
   const { config, updateConfig, dashboard } = useRmsStore();
   const [totalResources, setTotalResources] = useState('');
   const [monthlyHours, setMonthlyHours] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(4);
+  const [selectedYear, setSelectedYear] = useState(2026);
 
   useEffect(() => {
     setTotalResources(config?.total_resources ?? '');
     setMonthlyHours(config?.monthly_hours ?? '');
+    setSelectedMonth(config?.selected_month ?? 4);
+    setSelectedYear(config?.selected_year ?? 2026);
   }, [config]);
 
   if (!config) return null;
@@ -116,12 +123,26 @@ function ConfigBar() {
         <span className="font-medium text-graphite">Monthly Hours</span>
         <input className="h-10 w-32 rounded-md border border-line px-3" type="number" step="1" min="0" value={monthlyHours} onChange={(event) => setMonthlyHours(event.target.value)} />
       </label>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium text-graphite">Month</span>
+        <select className="h-10 w-36 rounded-md border border-line bg-white px-3" value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))}>
+          {MONTH_NAMES.map((month, index) => <option key={month} value={index}>{month}</option>)}
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm">
+        <span className="font-medium text-graphite">Year</span>
+        <select className="h-10 w-28 rounded-md border border-line bg-white px-3" value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+          {YEAR_OPTIONS.map((year) => <option key={year} value={year}>{year}</option>)}
+        </select>
+      </label>
       <button
         title="Save configuration"
         className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-white"
         onClick={() => updateConfig({
           total_resources: totalResources === '' ? '' : Number(totalResources),
           monthly_hours: monthlyHours === '' ? '' : Number(monthlyHours),
+          selected_month: selectedMonth,
+          selected_year: selectedYear,
         })}
       >
         <Save size={16} /> Save
@@ -187,7 +208,7 @@ function Dashboard() {
                   <td className="font-medium">{resource.name}</td>
                   <td>{resource.region}</td>
                   <td>{num(resource.allocation_percentage)}</td>
-                  <td>{num(resource.remaining_capacity)}</td>
+                  <td>{num(resource.remaining_capacity * 10)}</td>
                   <td>{num(resource.allocated_hours)}</td>
                 </tr>
               ))}
@@ -196,7 +217,7 @@ function Dashboard() {
         </div>
         <div className="grid-shell">
           <table className="data-table compact-table">
-            <thead><tr><th>Program</th><th>Tenrox</th><th>India</th><th>USA</th><th>Europe</th><th>% of Resources</th><th>Resource Summary</th></tr></thead>
+            <thead><tr><th>Program</th><th>Tenrox</th><th>India</th><th>USA</th><th>Europe</th><th>No of Resources</th><th>% of Resources</th><th>Resource Summary</th></tr></thead>
             <tbody>
               {dashboard.program_summary.map((program) => (
                 <tr key={program.id}>
@@ -205,6 +226,7 @@ function Dashboard() {
                   <td>{num(program.india_resources)}</td>
                   <td>{num(program.usa_resources)}</td>
                   <td>{num(program.europe_resources)}</td>
+                  <td>{num(program.no_of_resources)}</td>
                   <td>{pct(program.percent_of_total_resources)}</td>
                   <td className="max-w-lg text-sm text-graphite">{program.resource_allocation_summary}</td>
                 </tr>

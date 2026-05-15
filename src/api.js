@@ -76,6 +76,9 @@ function autoWidth(sheet) {
 async function exportExcelWorkbook() {
   const { default: ExcelJS } = await import('exceljs');
   const dashboard = buildDashboard(readState());
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const exportMonth = monthNames[Number(dashboard.config?.selected_month) || 0] || monthNames[0];
+  const exportYear = Number(dashboard.config?.selected_year) || new Date().getFullYear();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Energizers RMS';
   workbook.created = new Date();
@@ -87,7 +90,7 @@ async function exportExcelWorkbook() {
     ['No of Hours/month Per Res', dashboard.totals.monthly_hours],
     ['Total No of hours', dashboard.totals.total_capacity_hours],
     [],
-    ['Program Name', 'Tenrox Code', 'India', 'USA', 'Europe', '% of Resources', 'Resource Summary'],
+    ['Program Name', 'Tenrox Code', 'India', 'USA', 'Europe', 'No of Resources', '% of Resources', 'Resource Summary'],
   ]);
 
   styleHeader(sheet.getRow(1));
@@ -100,21 +103,22 @@ async function exportExcelWorkbook() {
       program.india_resources,
       program.usa_resources,
       program.europe_resources,
+      program.no_of_resources,
       program.percent_of_total_resources,
       program.resource_allocation_summary || '',
     ]);
   });
 
-  ['B', 'C', 'D', 'E'].forEach((column) => {
+  ['B', 'C', 'D', 'E', 'F'].forEach((column) => {
     sheet.getColumn(column).numFmt = '0.00';
   });
-  sheet.getColumn('F').numFmt = '0.00%';
-  sheet.getColumn('G').alignment = { wrapText: true, vertical: 'top' };
-  sheet.getColumn('G').width = 64;
+  sheet.getColumn('G').numFmt = '0.00%';
+  sheet.getColumn('H').alignment = { wrapText: true, vertical: 'top' };
+  sheet.getColumn('H').width = 64;
 
   applyBorders(sheet);
   autoWidth(sheet);
-  sheet.getColumn('G').width = 64;
+  sheet.getColumn('H').width = 64;
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -123,7 +127,7 @@ async function exportExcelWorkbook() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'energizers-resource-plan.xlsx';
+  link.download = `Energizers RMS ${exportMonth} ${exportYear}.xlsx`;
   link.click();
   URL.revokeObjectURL(url);
 }

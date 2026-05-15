@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'energizers-rms-state-v1';
+const DEFAULT_MONTH_INDEX = 4;
+const DEFAULT_YEAR = 2026;
 
 function makeId(prefix) {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -66,6 +68,8 @@ function defaultState() {
       id: 'config',
       total_resources: '',
       monthly_hours: '',
+      selected_month: DEFAULT_MONTH_INDEX,
+      selected_year: DEFAULT_YEAR,
     },
   };
 }
@@ -298,6 +302,7 @@ export function buildDashboard(state) {
       europe_resources: regionTotal('Europe'),
       total_program_resources: totalProgramResources,
       percent_of_total_resources: totalResources > 0 ? round4(totalProgramResources / totalResources) : 0,
+      no_of_resources: totalProgramResources,
       resource_allocation_summary: generateProgramResourceSummary(program.id, allocations),
     };
   });
@@ -491,8 +496,10 @@ export function commitPreviewRows(state) {
 export function updateConfigRecord(state, payload) {
   state.config = {
     ...state.config,
-    total_resources: payload.total_resources === '' ? '' : round4(payload.total_resources),
-    monthly_hours: payload.monthly_hours === '' ? '' : round2(payload.monthly_hours),
+    total_resources: payload.total_resources === '' || payload.total_resources === undefined ? state.config.total_resources : round4(payload.total_resources),
+    monthly_hours: payload.monthly_hours === '' || payload.monthly_hours === undefined ? state.config.monthly_hours : round2(payload.monthly_hours),
+    selected_month: payload.selected_month === undefined ? state.config.selected_month : Number(payload.selected_month),
+    selected_year: payload.selected_year === undefined ? state.config.selected_year : Number(payload.selected_year),
   };
   return state.config;
 }
