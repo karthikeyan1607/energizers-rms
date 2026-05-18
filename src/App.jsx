@@ -18,7 +18,20 @@ function Stat({ label, value, subtext }) {
 }
 
 function Toasts() {
-  const { error, notice, clearError, setNotice } = useRmsStore();
+  const { error, notice, clearError, clearNotice, setNotice } = useRmsStore();
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const timer = window.setTimeout(() => clearError(), 3000);
+    return () => window.clearTimeout(timer);
+  }, [error, clearError]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = window.setTimeout(() => clearNotice(), 3000);
+    return () => window.clearTimeout(timer);
+  }, [notice, clearNotice]);
+
   if (!error && !notice) return null;
   return (
     <div className="fixed right-4 top-4 z-20 grid max-w-md gap-2">
@@ -162,8 +175,8 @@ function MasterDataImportPanel() {
     <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
       <div>
         <h2 className="text-lg font-semibold">Master Data Import</h2>
-        <p className="text-sm text-graphite">Load resources and programs before importing Azure stories.</p>
       </div>
+      <p className="text-sm text-graphite">Load resources and programs before importing Azure stories.</p>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="flex min-h-24 cursor-pointer items-center justify-between gap-4 rounded-lg border border-line bg-frost p-4">
           <div>
@@ -240,10 +253,9 @@ function Dashboard() {
 }
 
 function AllocationGrid() {
-  const { dashboard, resources, programs, updateAllocation, createAllocation, createResource, deleteAllocation } = useRmsStore();
+  const { dashboard, resources, programs, updateAllocation, createAllocation, deleteAllocation } = useRmsStore();
   const [drafts, setDrafts] = useState({});
   const [newRow, setNewRow] = useState({ resource_id: '', program_id: '', story_points: 1 });
-  const [newResource, setNewResource] = useState({ name: '', region: 'India' });
   const [resourceSort, setResourceSort] = useState('asc');
 
   const allocations = dashboard?.allocations || [];
@@ -275,28 +287,6 @@ function AllocationGrid() {
             <Plus size={16} /> Add
           </button>
         </div>
-      </div>
-      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-line bg-white p-3">
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-graphite">Resource Name</span>
-          <input className="h-9 w-48 rounded-md border border-line px-2" value={newResource.name} onChange={(e) => setNewResource({ ...newResource, name: e.target.value })} />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-graphite">Region</span>
-          <select className="h-9 rounded-md border border-line bg-white px-2" value={newResource.region} onChange={(e) => setNewResource({ ...newResource, region: e.target.value })}>
-            {['India', 'USA', 'Europe', 'Unknown'].map((region) => <option key={region} value={region}>{region}</option>)}
-          </select>
-        </label>
-        <button
-          title="Add resource"
-          className="inline-flex h-9 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white"
-          onClick={async () => {
-            await createResource(newResource);
-            setNewResource({ name: '', region: 'India' });
-          }}
-        >
-          <Plus size={16} /> Add Resource
-        </button>
       </div>
       <div className="grid-shell">
         <table className="data-table">
@@ -397,7 +387,8 @@ function ImportPanel() {
 }
 
 function App() {
-  const { load, loading, dashboard, error } = useRmsStore();
+  const { load, loading, dashboard, error, snapshots, saveSnapshot, loadSnapshot } = useRmsStore();
+  const [showSnapshots, setShowSnapshots] = useState(false);
 
   useEffect(() => { load(); }, [load]);
 
@@ -409,9 +400,17 @@ function App() {
           <div>
             <h1 className="text-2xl font-semibold text-ink">Energizers Resource Management System</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button title="Refresh data" className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={load}><RefreshCcw size={16} /> Refresh</button>
             <button title="Export Excel" className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white" onClick={() => api.exportExcel()}><Download size={16} /> Export</button>
+            <button title="Save Snapshot" className="inline-flex h-10 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={() => saveSnapshot()}>Save Snapshot</button>
+            <button title="Load Snapshot" className="inline-flex h-10 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={() => setShowSnapshots((current) => !current)}>Load Snapshot</button>
+            {showSnapshots && (
+              <select className="h-10 rounded-md border border-line bg-white px-3 text-sm" defaultValue="" onChange={(e) => e.target.value && loadSnapshot(e.target.value)}>
+                <option value="">Select Snapshot</option>
+                {snapshots.map((snapshot) => <option key={snapshot.key} value={snapshot.key}>{snapshot.label}</option>)}
+              </select>
+            )}
           </div>
         </header>
 

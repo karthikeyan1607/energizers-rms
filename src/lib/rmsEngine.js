@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'energizers-rms-state-v1';
+const SNAPSHOT_PREFIX = 'snapshot_';
 const DEFAULT_MONTH_INDEX = 4;
 const DEFAULT_YEAR = 2026;
 
@@ -96,6 +97,11 @@ export function readState() {
 export function writeState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   return state;
+}
+
+function snapshotKey(monthIndex, year) {
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return `${SNAPSHOT_PREFIX}${monthNames[Number(monthIndex) || 0]}_${year}`;
 }
 
 function findResourceByName(state, name) {
@@ -518,4 +524,39 @@ export function listResources(state) {
 
 export function listPrograms(state) {
   return sortPrograms(state.programs);
+}
+
+export function saveSnapshot(state) {
+  const key = snapshotKey(state.config.selected_month, state.config.selected_year);
+  localStorage.setItem(key, JSON.stringify({
+    resources: state.resources,
+    programs: state.programs,
+    allocations: state.allocations,
+    config: state.config,
+  }));
+  return key;
+}
+
+export function listSnapshots() {
+  const snapshots = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(SNAPSHOT_PREFIX)) continue;
+    snapshots.push({
+      key,
+      label: key.replace(SNAPSHOT_PREFIX, '').replace('_', ' '),
+    });
+  }
+  return snapshots.sort((left, right) => left.key.localeCompare(right.key));
+}
+
+export function loadSnapshot(state, key) {
+  const raw = localStorage.getItem(key);
+  if (!raw) throw new Error('Snapshot not found.');
+  const snapshot = JSON.parse(raw);
+  state.resources = Array.isArray(snapshot.resources) ? snapshot.resources : [];
+  state.programs = Array.isArray(snapshot.programs) ? snapshot.programs : [];
+  state.allocations = Array.isArray(snapshot.allocations) ? snapshot.allocations : [];
+  state.config = { ...state.config, ...(snapshot.config || {}) };
+  state.previewRows = [];
 }
