@@ -1,5 +1,6 @@
 import {
   buildDashboard,
+  clearCurrentPlanning,
   commitPreviewRows,
   createAllocationRecord,
   createProgramRecord,
@@ -79,6 +80,8 @@ function autoWidth(sheet) {
 async function exportExcelWorkbook() {
   const { default: ExcelJS } = await import('exceljs');
   const dashboard = buildDashboard(readState());
+  const exportRows = dashboard.program_summary.filter((program) => Number(program.total_program_resources) > 0);
+  const usedResources = exportRows.reduce((sum, program) => sum + Number(program.total_program_resources || 0), 0);
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const exportMonth = monthNames[Number(dashboard.config?.selected_month) || 0] || monthNames[0];
   const exportYear = Number(dashboard.config?.selected_year) || new Date().getFullYear();
@@ -90,16 +93,17 @@ async function exportExcelWorkbook() {
   sheet.addRows([
     ['Metric', 'Value'],
     ['Total Resource', dashboard.totals.total_resources],
+    ['No of Resources', usedResources],
     ['No of Hours/month Per Res', dashboard.totals.monthly_hours],
     ['Total No of hours', dashboard.totals.total_capacity_hours],
     [],
-    ['Program Name', 'Tenrox Code', 'India', 'USA', 'Europe', 'No of Resources', '% of Resources', 'Resource Summary'],
+    ['Program Name', 'Tenrox Code', 'India', 'USA', 'Europe', 'No of Resources', 'Forecast Hours', '% of Resources', 'Resource Summary'],
   ]);
 
   styleHeader(sheet.getRow(1));
-  styleHeader(sheet.getRow(6));
+  styleHeader(sheet.getRow(7));
 
-  dashboard.program_summary.forEach((program) => {
+  exportRows.forEach((program) => {
     sheet.addRow([
       program.name,
       program.tenrox_code || 'N/A',
@@ -107,21 +111,22 @@ async function exportExcelWorkbook() {
       program.usa_resources,
       program.europe_resources,
       program.no_of_resources,
+      program.forecast_hours,
       program.percent_of_total_resources,
       program.resource_allocation_summary || '',
     ]);
   });
 
-  ['B', 'C', 'D', 'E', 'F'].forEach((column) => {
+  ['B', 'C', 'D', 'E', 'F', 'G'].forEach((column) => {
     sheet.getColumn(column).numFmt = '0.00';
   });
-  sheet.getColumn('G').numFmt = '0.00%';
-  sheet.getColumn('H').alignment = { wrapText: true, vertical: 'top' };
-  sheet.getColumn('H').width = 64;
+  sheet.getColumn('H').numFmt = '0.00%';
+  sheet.getColumn('I').alignment = { wrapText: true, vertical: 'top' };
+  sheet.getColumn('I').width = 64;
 
   applyBorders(sheet);
   autoWidth(sheet);
-  sheet.getColumn('H').width = 64;
+  sheet.getColumn('I').width = 64;
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -165,6 +170,7 @@ export const api = {
   },
   preview: async () => readState().previewRows,
   commitImport: async () => withState((state) => commitPreviewRows(state)),
+  clearCurrentPlanning: async () => withState((state) => clearCurrentPlanning(state)),
   exportExcel: async () => exportExcelWorkbook(),
   saveSnapshot: async () => withState((state) => ({ key: saveSnapshot(state) })),
   listSnapshots: async () => listSnapshots(),

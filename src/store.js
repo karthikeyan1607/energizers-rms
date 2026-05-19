@@ -99,9 +99,14 @@ export const useRmsStore = create((set, get) => ({
     await get().load({ silent: true });
   },
 
+  clearCurrentPlanning: async () => {
+    await get().runAction(() => api.clearCurrentPlanning(), { notice: 'Current planning cleared.' });
+    await get().load({ silent: true });
+  },
+
   saveSnapshot: async () => {
     const result = await get().runAction(() => api.saveSnapshot());
-    set({ notice: `${result.key.replace('snapshot_', '').replace('_', ' ')} snapshot saved.` });
+    set({ notice: `${result.key.replace('snapshot_', '').replace('_', ' ')} snapshot ${result.updated ? 'updated' : 'saved'}.` });
     await get().load({ silent: true });
   },
 

@@ -230,7 +230,7 @@ function Dashboard() {
         </div>
         <div className="grid-shell">
           <table className="data-table compact-table">
-            <thead><tr><th>Program</th><th>Tenrox</th><th>India</th><th>USA</th><th>Europe</th><th>No of Resources</th><th>% of Resources</th><th>Resource Summary</th></tr></thead>
+            <thead><tr><th>Program</th><th>Tenrox</th><th>India</th><th>USA</th><th>Europe</th><th>No of Resources</th><th>Forecast Hours</th><th>% of Resources</th><th>Resource Summary</th></tr></thead>
             <tbody>
               {dashboard.program_summary.map((program) => (
                 <tr key={program.id}>
@@ -240,6 +240,7 @@ function Dashboard() {
                   <td>{num(program.usa_resources)}</td>
                   <td>{num(program.europe_resources)}</td>
                   <td>{num(program.no_of_resources)}</td>
+                  <td>{num(program.forecast_hours)}</td>
                   <td>{pct(program.percent_of_total_resources)}</td>
                   <td className="max-w-lg text-sm text-graphite">{program.resource_allocation_summary}</td>
                 </tr>
@@ -253,7 +254,7 @@ function Dashboard() {
 }
 
 function AllocationGrid() {
-  const { dashboard, resources, programs, updateAllocation, createAllocation, deleteAllocation } = useRmsStore();
+  const { dashboard, resources, programs, updateAllocation, createAllocation, deleteAllocation, clearCurrentPlanning } = useRmsStore();
   const [drafts, setDrafts] = useState({});
   const [newRow, setNewRow] = useState({ resource_id: '', program_id: '', story_points: 1 });
   const [resourceSort, setResourceSort] = useState('asc');
@@ -286,6 +287,9 @@ function AllocationGrid() {
           <button title="Add allocation" className="inline-flex h-9 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white" onClick={() => createAllocation(newRow)}>
             <Plus size={16} /> Add
           </button>
+          <button title="Clear Current Planning" className="inline-flex h-9 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={() => clearCurrentPlanning()}>
+            Clear Current Planning
+          </button>
         </div>
       </div>
       <div className="grid-shell">
@@ -300,6 +304,7 @@ function AllocationGrid() {
                 </span>
               </th>
               <th>Program</th>
+              <th>User Story Title</th>
               <th>Story Points</th>
               <th>Allocation</th>
               <th>Hours</th>
@@ -325,6 +330,7 @@ function AllocationGrid() {
                       {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                     </select>
                   </td>
+                  <td className="max-w-xs text-sm text-graphite">{allocation.user_story_title || ''}</td>
                   <td><input className="cell-input" type="number" step="0.1" min="0" value={draft.story_points} onChange={(e) => setDraft(allocation.id, { story_points: Number(e.target.value) })} /></td>
                   <td>{num(draftAllocation)}</td>
                   <td>{num(draftAllocation * (dashboard?.totals.monthly_hours || 0))}</td>
@@ -363,12 +369,13 @@ function ImportPanel() {
       </div>
       <div className="grid-shell">
         <table className="data-table">
-          <thead><tr><th>Assigned To</th><th>Story Points</th><th>Program</th><th>Tenrox</th><th>Allocation</th><th>Hours</th></tr></thead>
+          <thead><tr><th>Assigned To</th><th>User Story Title</th><th>Story Points</th><th>Program</th><th>Tenrox</th><th>Allocation</th><th>Hours</th></tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan="6" className="text-center text-graphite">No preview rows. Upload an Azure Boards CSV.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan="7" className="text-center text-graphite">No preview rows. Upload an Azure Boards CSV.</td></tr>}
             {rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.assigned_to}</td>
+                <td className="max-w-xs text-sm text-graphite">{row.user_story_title || ''}</td>
                 <td>{num(row.story_points)}</td>
                 <td>{row.program}</td>
                 <td>{row.tenrox_code || 'N/A'}</td>

@@ -34,6 +34,14 @@ function firstNameOnly(value) {
   return normalizeName(value).split(' ')[0] || '';
 }
 
+function mergeStoryTitles(...values) {
+  const titles = values
+    .flatMap((value) => String(value || '').split(' | '))
+    .map((value) => normalizeName(value))
+    .filter(Boolean);
+  return [...new Set(titles)].join(' | ');
+}
+
 function parseAssignedTo(value) {
   const raw = normalizeName(value);
   const emailMatch = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
@@ -260,6 +268,7 @@ function createResolvedAllocation(state, allocation) {
     region: resource?.region || 'Unknown',
     program_name: program?.name || 'Unknown',
     tenrox_code: normalizeTenrox(program?.tenrox_code),
+    user_story_title: normalizeName(allocation.user_story_title),
     allocation_percentage: allocationPercentage,
     hours: round2(allocationPercentage * monthlyHours),
   };
@@ -309,6 +318,7 @@ export function buildDashboard(state) {
       total_program_resources: totalProgramResources,
       percent_of_total_resources: totalResources > 0 ? round4(totalProgramResources / totalResources) : 0,
       no_of_resources: totalProgramResources,
+      forecast_hours: round2(totalProgramResources * monthlyHours),
       resource_allocation_summary: generateProgramResourceSummary(program.id, allocations),
     };
   });
@@ -334,28 +344,51 @@ export function buildDashboard(state) {
 }
 
 export function importResourcesRows(state, rows) {
-  let imported = 0;
+  const previousResources = state.resources;
+  const nextResources = [];
   rows.forEach((row) => {
     const name = normalizeName(row['Resource Name'] ?? row.resource_name ?? row.ResourceName ?? row.name);
     if (!name) return;
     const email = normalizeEmail(row.Email ?? row.email);
     const region = normalizeRegion(row.Region ?? row.region);
-    upsertResourceRecord(state, { name, email, region, max_capacity: 1 }, { updateExisting: true });
-    imported += 1;
+    const existing = (email ? previousResources.find((resource) => normalizeEmail(resource.email) === email) : null)
+      || previousResources.find((resource) => normalizeMatch(resource.name) === normalizeMatch(name));
+    if (nextResources.some((resource) => normalizeEmail(resource.email) === email && email)) return;
+    if (nextResources.some((resource) => normalizeMatch(resource.name) === normalizeMatch(name))) return;
+    nextResources.push({
+      id: existing?.id || makeId('resource'),
+      name,
+      email,
+      region,
+      max_capacity: Number.isFinite(Number(existing?.max_capacity)) ? Number(existing.max_capacity) : 1,
+    });
   });
-  return imported;
+  state.resources = nextResources;
+  const validIds = new Set(nextResources.map((resource) => resource.id));
+  state.allocations = state.allocations.filter((allocation) => validIds.has(allocation.resource_id));
+  return nextResources.length;
 }
 
 export function importProgramsRows(state, rows) {
-  let imported = 0;
+  const previousPrograms = state.programs;
+  const nextPrograms = [];
   rows.forEach((row) => {
     const name = normalizeName(row['Program Name'] ?? row.program_name ?? row.ProgramName ?? row.name);
     if (!name) return;
     const tenrox_code = normalizeTenrox(row['Tenrox Code'] ?? row['Tenrox Project ID'] ?? row.tenrox_code);
-    upsertProgramRecord(state, { name, tenrox_code }, { updateExisting: true });
-    imported += 1;
+    const existing = previousPrograms.find((program) => normalizeMatch(program.name) === normalizeMatch(name))
+      || previousPrograms.find((program) => normalizeTenrox(program.tenrox_code) === tenrox_code);
+    if (nextPrograms.some((program) => normalizeMatch(program.name) === normalizeMatch(name))) return;
+    nextPrograms.push({
+      id: existing?.id || makeId('program'),
+      name,
+      tenrox_code,
+    });
   });
-  return imported;
+  state.programs = nextPrograms;
+  const validIds = new Set(nextPrograms.map((program) => program.id));
+  state.allocations = state.allocations.filter((allocation) => validIds.has(allocation.program_id));
+  return nextPrograms.length;
 }
 
 function readAzureValue(row, aliases) {
@@ -372,6 +405,7 @@ export function previewAzureImport(state, rows) {
     const storyPoints = Number(rawStoryPoints);
     const rawProgram = normalizeName(readAzureValue(row, ['program', 'program / area', 'area']));
     const tenroxCode = normalizeTenrox(readAzureValue(row, ['tenrox project id', 'tenrox code', 'tenroxcode', 'tenrox_project_id']));
+    const userStoryTitle = normalizeName(readAzureValue(row, ['user story title', 'user_story_title', 'title']));
 
     if (!assignedTo || String(rawStoryPoints).trim() === '' || !Number.isFinite(storyPoints) || storyPoints <= 0) return [];
 
@@ -385,6 +419,7 @@ export function previewAzureImport(state, rows) {
       assigned_to: matchedResource?.name || parsedAssignedTo.name || parsedAssignedTo.raw,
       assigned_to_email: matchedResource?.email || parsedAssignedTo.email || '',
       raw_assigned_to: assignedTo,
+      user_story_title: userStoryTitle,
       story_points: storyPoints,
       program: resolvedProgram.name,
       tenrox_code: resolvedProgram.tenrox_code,
@@ -425,6 +460,7 @@ function mergeAllocation(state, payload, existingId = null) {
       return {
         ...allocation,
         story_points: round4(Number(allocation.story_points) + storyPoints),
+        user_story_title: mergeStoryTitles(allocation.user_story_title, payload.user_story_title),
       };
     });
     savedId = duplicate.id;
@@ -435,6 +471,7 @@ function mergeAllocation(state, payload, existingId = null) {
       resource_id: resourceId,
       program_id: programId,
       story_points: round4(storyPoints),
+      user_story_title: normalizeName(payload.user_story_title),
     });
   }
 
@@ -492,6 +529,7 @@ export function commitPreviewRows(state) {
       resource_id: resource.id,
       program_id: program.id,
       story_points: Number(preview.story_points),
+      user_story_title: preview.user_story_title,
     }));
   });
 
@@ -518,6 +556,11 @@ export function createProgramRecord(state, payload) {
   return upsertProgramRecord(state, payload, { updateExisting: true });
 }
 
+export function clearCurrentPlanning(state) {
+  state.allocations = [];
+  state.previewRows = [];
+}
+
 export function listResources(state) {
   return sortResources(state.resources);
 }
@@ -528,13 +571,14 @@ export function listPrograms(state) {
 
 export function saveSnapshot(state) {
   const key = snapshotKey(state.config.selected_month, state.config.selected_year);
+  const updated = localStorage.getItem(key) !== null;
   localStorage.setItem(key, JSON.stringify({
     resources: state.resources,
     programs: state.programs,
     allocations: state.allocations,
     config: state.config,
   }));
-  return key;
+  return { key, updated };
 }
 
 export function listSnapshots() {
