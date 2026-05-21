@@ -255,7 +255,6 @@ function Dashboard() {
 
 function AllocationGrid() {
   const { dashboard, resources, programs, updateAllocation, createAllocation, deleteAllocation, clearCurrentPlanning } = useRmsStore();
-  const [drafts, setDrafts] = useState({});
   const [newRow, setNewRow] = useState({ resource_id: '', program_id: '', story_points: 1 });
   const [resourceSort, setResourceSort] = useState('asc');
 
@@ -264,13 +263,17 @@ function AllocationGrid() {
     () => Object.fromEntries(resources.map((resource) => [resource.id, resource.name])),
     [resources],
   );
-  const draftFor = (allocation) => drafts[allocation.id] || allocation;
-  const setDraft = (id, patch) => setDrafts((current) => ({ ...current, [id]: { ...draftFor(allocations.find((item) => item.id === id)), ...patch } }));
   const sortedAllocations = [...allocations].sort((left, right) => {
-    const leftName = resourceNameById[draftFor(left).resource_id] || left.resource_name || '';
-    const rightName = resourceNameById[draftFor(right).resource_id] || right.resource_name || '';
+    const leftName = resourceNameById[left.resource_id] || left.resource_name || '';
+    const rightName = resourceNameById[right.resource_id] || right.resource_name || '';
     const comparison = leftName.localeCompare(rightName);
     return resourceSort === 'asc' ? comparison : -comparison;
+  });
+
+  const saveAllocationPatch = (allocation, patch) => updateAllocation(allocation.id, {
+    ...allocation,
+    ...patch,
+    user_story_title: allocation.user_story_title,
   });
 
   return (
@@ -294,6 +297,15 @@ function AllocationGrid() {
       </div>
       <div className="grid-shell">
         <table className="data-table">
+          <colgroup>
+            <col style={{ width: '17%' }} />
+            <col style={{ width: '17%' }} />
+            <col style={{ width: '34%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '6%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th>
@@ -313,12 +325,11 @@ function AllocationGrid() {
           </thead>
           <tbody>
             {sortedAllocations.map((allocation) => {
-              const draft = draftFor(allocation);
-              const draftAllocation = Number(draft.story_points || 0) * 0.1;
+              const draftAllocation = Number(allocation.story_points || 0) * 0.1;
               return (
                 <tr key={allocation.id}>
                   <td>
-                    <select className="cell-input" value={draft.resource_id} onChange={(e) => setDraft(allocation.id, { resource_id: e.target.value })}>
+                    <select className="cell-input" value={allocation.resource_id} onChange={(e) => saveAllocationPatch(allocation, { resource_id: e.target.value })}>
                       {resources
                         .slice()
                         .sort((a, b) => a.name.localeCompare(b.name))
@@ -326,23 +337,18 @@ function AllocationGrid() {
                     </select>
                   </td>
                   <td>
-                    <select className="cell-input" value={draft.program_id} onChange={(e) => setDraft(allocation.id, { program_id: e.target.value })}>
+                    <select className="cell-input" value={allocation.program_id} onChange={(e) => saveAllocationPatch(allocation, { program_id: e.target.value })}>
                       {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                     </select>
                   </td>
-                  <td className="max-w-xs text-sm text-graphite">{allocation.user_story_title || ''}</td>
-                  <td><input className="cell-input" type="number" step="0.1" min="0" value={draft.story_points} onChange={(e) => setDraft(allocation.id, { story_points: Number(e.target.value) })} /></td>
-                  <td>{num(draftAllocation)}</td>
-                  <td>{num(draftAllocation * (dashboard?.totals.monthly_hours || 0))}</td>
+                  <td className="min-w-[320px] max-w-xl text-sm text-graphite">{allocation.user_story_title || ''}</td>
+                  <td><input className="cell-input min-w-[88px]" type="number" step="0.1" min="0" value={allocation.story_points} onChange={(e) => saveAllocationPatch(allocation, { story_points: Number(e.target.value) })} /></td>
+                  <td className="whitespace-nowrap">{num(draftAllocation)}</td>
+                  <td className="whitespace-nowrap">{num(draftAllocation * (dashboard?.totals.monthly_hours || 0))}</td>
                   <td>
-                    <div className="flex gap-2">
-                      <button title="Save allocation" className="inline-flex h-8 items-center rounded-md border border-line px-2 text-sm font-semibold" onClick={() => updateAllocation(allocation.id, draft)}>
-                        <Save size={15} />
-                      </button>
-                      <button title="Delete allocation" className="inline-flex h-8 items-center rounded-md border border-rose-200 bg-rose-50 px-2 text-sm font-semibold text-rose-800" onClick={() => deleteAllocation(allocation.id)}>
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
+                    <button title="Delete allocation" className="inline-flex h-8 items-center rounded-md border border-rose-200 bg-rose-50 px-2 text-sm font-semibold text-rose-800" onClick={() => deleteAllocation(allocation.id)}>
+                      <Trash2 size={15} />
+                    </button>
                   </td>
                 </tr>
               );

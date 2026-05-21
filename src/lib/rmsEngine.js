@@ -498,6 +498,7 @@ export function updateAllocationRecord(state, id, payload) {
     resource_id: payload.resource_id,
     program_id: payload.program_id,
     story_points: Number(payload.story_points),
+    user_story_title: payload.user_story_title ?? existing.user_story_title,
   }, id);
 }
 
