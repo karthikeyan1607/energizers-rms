@@ -138,6 +138,11 @@ function findProgramByTenrox(state, tenroxCode) {
   return state.programs.find((program) => normalizeTenrox(program.tenrox_code).toLowerCase() === lookup) || null;
 }
 
+function findProgramsByTenrox(state, tenroxCode) {
+  const lookup = normalizeTenrox(tenroxCode).toLowerCase();
+  return state.programs.filter((program) => normalizeTenrox(program.tenrox_code).toLowerCase() === lookup);
+}
+
 function sortResources(resources) {
   return [...resources].sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -247,13 +252,26 @@ function resolveProgramForImport(state, rawProgram, rawTenroxCode) {
   const normalizedTenrox = normalizeTenrox(rawTenroxCode);
   const byName = normalizedProgram ? findProgramByName(state, normalizedProgram) : null;
   if (byName) {
-    return { name: byName.name, tenrox_code: normalizeTenrox(byName.tenrox_code || normalizedTenrox) };
+    return { name: byName.name, tenrox_code: normalizeTenrox(byName.tenrox_code || normalizedTenrox), program_id: byName.id, matching_program_ids: [] };
   }
-  const byTenrox = normalizedTenrox !== 'N/A' ? findProgramByTenrox(state, normalizedTenrox) : null;
-  if (byTenrox) {
-    return { name: byTenrox.name, tenrox_code: normalizeTenrox(byTenrox.tenrox_code) };
+  const byTenrox = normalizedTenrox !== 'N/A' ? findProgramsByTenrox(state, normalizedTenrox) : [];
+  if (byTenrox.length === 1) {
+    return {
+      name: byTenrox[0].name,
+      tenrox_code: normalizeTenrox(byTenrox[0].tenrox_code),
+      program_id: byTenrox[0].id,
+      matching_program_ids: [],
+    };
   }
-  return { name: 'Unknown', tenrox_code: normalizedTenrox };
+  if (byTenrox.length > 1) {
+    return {
+      name: 'Select Program',
+      tenrox_code: normalizedTenrox,
+      program_id: '',
+      matching_program_ids: byTenrox.map((program) => program.id),
+    };
+  }
+  return { name: 'Unknown', tenrox_code: normalizedTenrox, program_id: '', matching_program_ids: [] };
 }
 
 function createResolvedAllocation(state, allocation) {
@@ -422,6 +440,8 @@ export function previewAzureImport(state, rows) {
       user_story_title: userStoryTitle,
       story_points: storyPoints,
       program: resolvedProgram.name,
+      program_id: resolvedProgram.program_id,
+      matching_program_ids: resolvedProgram.matching_program_ids,
       tenrox_code: resolvedProgram.tenrox_code,
       allocation_percentage: allocationPercentage,
       hours: round2(allocationPercentage * monthlyHours),
@@ -472,6 +492,7 @@ function mergeAllocation(state, payload, existingId = null) {
       program_id: programId,
       story_points: round4(storyPoints),
       user_story_title: normalizeName(payload.user_story_title),
+      matching_program_ids: Array.isArray(payload.matching_program_ids) ? payload.matching_program_ids : [],
     });
   }
 
@@ -494,11 +515,31 @@ export function createAllocationRecord(state, payload) {
 export function updateAllocationRecord(state, id, payload) {
   const existing = state.allocations.find((allocation) => allocation.id === id);
   if (!existing) throw new Error('Allocation not found.');
+  if (!payload.program_id && !existing.program_id) {
+    if (!state.resources.some((resource) => resource.id === payload.resource_id)) {
+      throw new Error('Resource must exist before allocation.');
+    }
+    const nextAllocations = state.allocations.map((allocation) => (
+      allocation.id === id
+        ? {
+            ...allocation,
+            resource_id: payload.resource_id,
+            story_points: round4(Number(payload.story_points)),
+            user_story_title: payload.user_story_title ?? existing.user_story_title,
+            matching_program_ids: payload.matching_program_ids ?? existing.matching_program_ids ?? [],
+          }
+        : allocation
+    ));
+    ensureResourceCapacity(state, payload.resource_id, nextAllocations);
+    state.allocations = nextAllocations;
+    return state.allocations.find((allocation) => allocation.id === id);
+  }
   return mergeAllocation(state, {
     resource_id: payload.resource_id,
     program_id: payload.program_id,
     story_points: Number(payload.story_points),
     user_story_title: payload.user_story_title ?? existing.user_story_title,
+    matching_program_ids: payload.matching_program_ids ?? existing.matching_program_ids ?? [],
   }, id);
 }
 
@@ -520,6 +561,36 @@ export function commitPreviewRows(state) {
       }, { updateExisting: false });
     }
 
+    if (preview.program_id) {
+      committed.push(createAllocationRecord(state, {
+        resource_id: resource.id,
+        program_id: preview.program_id,
+        story_points: Number(preview.story_points),
+        user_story_title: preview.user_story_title,
+        matching_program_ids: preview.matching_program_ids,
+      }));
+      return;
+    }
+
+    if (preview.program === 'Select Program' && preview.matching_program_ids?.length > 1) {
+      const nextAllocations = [
+        ...state.allocations,
+        {
+          id: makeId('allocation'),
+          resource_id: resource.id,
+          program_id: '',
+          story_points: round4(Number(preview.story_points)),
+          user_story_title: preview.user_story_title,
+          matching_program_ids: preview.matching_program_ids,
+        },
+      ];
+      ensureResourceCapacity(state, resource.id, nextAllocations);
+      const pendingAllocation = nextAllocations[nextAllocations.length - 1];
+      state.allocations = nextAllocations;
+      committed.push(pendingAllocation);
+      return;
+    }
+
     const program = upsertProgramRecord(
       state,
       { name: preview.program || 'Unknown', tenrox_code: preview.tenrox_code || 'N/A' },
@@ -531,6 +602,7 @@ export function commitPreviewRows(state) {
       program_id: program.id,
       story_points: Number(preview.story_points),
       user_story_title: preview.user_story_title,
+      matching_program_ids: preview.matching_program_ids,
     }));
   });
 

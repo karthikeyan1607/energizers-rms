@@ -326,6 +326,10 @@ function AllocationGrid() {
           <tbody>
             {sortedAllocations.map((allocation) => {
               const draftAllocation = Number(allocation.story_points || 0) * 0.1;
+              const matchingPrograms = allocation.matching_program_ids?.length
+                ? programs.filter((program) => allocation.matching_program_ids.includes(program.id))
+                : programs;
+              const requiresProgramSelection = !allocation.program_id && allocation.matching_program_ids?.length > 1;
               return (
                 <tr key={allocation.id}>
                   <td>
@@ -337,8 +341,13 @@ function AllocationGrid() {
                     </select>
                   </td>
                   <td>
-                    <select className="cell-input" value={allocation.program_id} onChange={(e) => saveAllocationPatch(allocation, { program_id: e.target.value })}>
-                      {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+                    <select
+                      className={`cell-input ${requiresProgramSelection ? 'border-amber-300 bg-amber-50' : ''}`}
+                      value={allocation.program_id}
+                      onChange={(e) => saveAllocationPatch(allocation, { program_id: e.target.value })}
+                    >
+                      {requiresProgramSelection && <option value="">Select Program</option>}
+                      {matchingPrograms.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                     </select>
                   </td>
                   <td className="min-w-[320px] max-w-xl text-sm text-graphite">{allocation.user_story_title || ''}</td>
