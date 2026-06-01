@@ -285,7 +285,7 @@ function createResolvedAllocation(state, allocation) {
     resource_name: resource?.name || 'Unknown',
     region: resource?.region || 'Unknown',
     program_name: program?.name || 'Unknown',
-    tenrox_code: normalizeTenrox(program?.tenrox_code),
+    tenrox_code: normalizeTenrox(program?.tenrox_code || allocation.tenrox_code),
     user_story_title: normalizeName(allocation.user_story_title),
     allocation_percentage: allocationPercentage,
     hours: round2(allocationPercentage * monthlyHours),
@@ -463,29 +463,24 @@ function mergeAllocation(state, payload, existingId = null) {
 
   ensureNoOrphans(state, resourceId, programId);
 
-  const duplicate = state.allocations.find(
-    (allocation) => allocation.resource_id === resourceId && allocation.program_id === programId && allocation.id !== existingId,
-  );
-
   let nextAllocations = state.allocations.map((allocation) => ({ ...allocation }));
-  let savedId = existingId;
+  const savedId = existingId || makeId('allocation');
 
   if (existingId) {
-    nextAllocations = nextAllocations.filter((allocation) => allocation.id !== existingId);
-  }
-
-  if (duplicate) {
-    nextAllocations = nextAllocations.map((allocation) => {
-      if (allocation.id !== duplicate.id) return allocation;
-      return {
-        ...allocation,
-        story_points: round4(Number(allocation.story_points) + storyPoints),
-        user_story_title: mergeStoryTitles(allocation.user_story_title, payload.user_story_title),
-      };
-    });
-    savedId = duplicate.id;
+    nextAllocations = nextAllocations.map((allocation) => (
+      allocation.id === existingId
+        ? {
+            ...allocation,
+            resource_id: resourceId,
+            program_id: programId,
+            story_points: round4(storyPoints),
+            user_story_title: normalizeName(payload.user_story_title),
+            matching_program_ids: Array.isArray(payload.matching_program_ids) ? payload.matching_program_ids : [],
+            tenrox_code: normalizeTenrox(payload.tenrox_code || allocation.tenrox_code),
+          }
+        : allocation
+    ));
   } else {
-    savedId = existingId || makeId('allocation');
     nextAllocations.push({
       id: savedId,
       resource_id: resourceId,
@@ -493,6 +488,7 @@ function mergeAllocation(state, payload, existingId = null) {
       story_points: round4(storyPoints),
       user_story_title: normalizeName(payload.user_story_title),
       matching_program_ids: Array.isArray(payload.matching_program_ids) ? payload.matching_program_ids : [],
+      tenrox_code: normalizeTenrox(payload.tenrox_code),
     });
   }
 
@@ -527,6 +523,7 @@ export function updateAllocationRecord(state, id, payload) {
             story_points: round4(Number(payload.story_points)),
             user_story_title: payload.user_story_title ?? existing.user_story_title,
             matching_program_ids: payload.matching_program_ids ?? existing.matching_program_ids ?? [],
+            tenrox_code: normalizeTenrox(payload.tenrox_code || existing.tenrox_code),
           }
         : allocation
     ));
@@ -540,6 +537,7 @@ export function updateAllocationRecord(state, id, payload) {
     story_points: Number(payload.story_points),
     user_story_title: payload.user_story_title ?? existing.user_story_title,
     matching_program_ids: payload.matching_program_ids ?? existing.matching_program_ids ?? [],
+    tenrox_code: payload.tenrox_code ?? existing.tenrox_code,
   }, id);
 }
 
@@ -568,6 +566,7 @@ export function commitPreviewRows(state) {
         story_points: Number(preview.story_points),
         user_story_title: preview.user_story_title,
         matching_program_ids: preview.matching_program_ids,
+        tenrox_code: preview.tenrox_code,
       }));
       return;
     }
@@ -582,6 +581,7 @@ export function commitPreviewRows(state) {
           story_points: round4(Number(preview.story_points)),
           user_story_title: preview.user_story_title,
           matching_program_ids: preview.matching_program_ids,
+          tenrox_code: preview.tenrox_code,
         },
       ];
       ensureResourceCapacity(state, resource.id, nextAllocations);
@@ -603,6 +603,7 @@ export function commitPreviewRows(state) {
       story_points: Number(preview.story_points),
       user_story_title: preview.user_story_title,
       matching_program_ids: preview.matching_program_ids,
+      tenrox_code: preview.tenrox_code,
     }));
   });
 

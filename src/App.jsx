@@ -134,7 +134,10 @@ function ConfigBar() {
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-medium text-graphite">Monthly Hours</span>
-        <input className="h-10 w-32 rounded-md border border-line px-3" type="number" step="1" min="0" value={monthlyHours} onChange={(event) => setMonthlyHours(event.target.value)} />
+        <select className="h-10 w-32 rounded-md border border-line bg-white px-3" value={monthlyHours} onChange={(event) => setMonthlyHours(event.target.value)}>
+          <option value="">Select</option>
+          {[168, 176, 184].map((hours) => <option key={hours} value={hours}>{hours}</option>)}
+        </select>
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-medium text-graphite">Month</span>
@@ -274,6 +277,7 @@ function AllocationGrid() {
     ...allocation,
     ...patch,
     user_story_title: allocation.user_story_title,
+    tenrox_code: allocation.tenrox_code,
   });
 
   return (
@@ -298,13 +302,14 @@ function AllocationGrid() {
       <div className="grid-shell">
         <table className="data-table">
           <colgroup>
-            <col style={{ width: '17%' }} />
-            <col style={{ width: '17%' }} />
-            <col style={{ width: '34%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '35%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '6%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '2%' }} />
           </colgroup>
           <thead>
             <tr>
@@ -316,6 +321,7 @@ function AllocationGrid() {
                 </span>
               </th>
               <th>Program</th>
+              <th>Tenrox</th>
               <th>User Story Title</th>
               <th>Story Points</th>
               <th>Allocation</th>
@@ -350,6 +356,7 @@ function AllocationGrid() {
                       {matchingPrograms.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                     </select>
                   </td>
+                  <td className="whitespace-nowrap text-sm text-graphite">{allocation.tenrox_code || 'N/A'}</td>
                   <td className="min-w-[320px] max-w-xl text-sm text-graphite">{allocation.user_story_title || ''}</td>
                   <td><input className="cell-input min-w-[88px]" type="number" step="0.1" min="0" value={allocation.story_points} onChange={(e) => saveAllocationPatch(allocation, { story_points: Number(e.target.value) })} /></td>
                   <td className="whitespace-nowrap">{num(draftAllocation)}</td>
@@ -417,7 +424,7 @@ function App() {
   return (
     <main className="min-h-screen">
       <Toasts />
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6">
+      <div className="mx-auto grid w-[95vw] max-w-[1800px] gap-6 px-4 py-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-ink">Energizers Resource Management System</h1>
