@@ -293,8 +293,20 @@ function createResolvedAllocation(state, allocation) {
 }
 
 function generateProgramResourceSummary(programId, allocations) {
-  return allocations
+  const groupedAllocations = allocations
     .filter((allocation) => allocation.program_id === programId)
+    .reduce((groups, allocation) => {
+      const key = `${allocation.program_id}::${allocation.resource_name}`;
+      const current = groups.get(key) || {
+        resource_name: allocation.resource_name,
+        allocation_percentage: 0,
+      };
+      current.allocation_percentage += Number(allocation.allocation_percentage) || 0;
+      groups.set(key, current);
+      return groups;
+    }, new Map());
+
+  return [...groupedAllocations.values()]
     .sort((left, right) => right.allocation_percentage - left.allocation_percentage || left.resource_name.localeCompare(right.resource_name))
     .map((allocation) => `${firstNameOnly(allocation.resource_name)} (${formatAllocationSummaryValue(allocation.allocation_percentage)})`)
     .join(', ');
