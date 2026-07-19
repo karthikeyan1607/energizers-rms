@@ -110,6 +110,83 @@ function SearchableResourceDropdown({ resources, selectedId, onChange, className
   );
 }
 
+function SearchableProgramDropdown({ programs, selectedId, onChange, className = 'h-9 w-56 rounded-md border border-line px-2', placeholder = 'Search program', allowEmpty = false, emptyLabel = 'Select Program' }) {
+  const wrapperRef = useRef(null);
+  const sortedPrograms = useMemo(() => [...programs].sort((a, b) => a.name.localeCompare(b.name)), [programs]);
+  const selectedProgram = sortedPrograms.find((program) => program.id === selectedId);
+  const [query, setQuery] = useState(selectedProgram?.name || '');
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setQuery(selectedProgram?.name || '');
+  }, [selectedProgram?.name]);
+
+  useEffect(() => {
+    function handlePointer(event) {
+      if (!wrapperRef.current?.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointer);
+    return () => document.removeEventListener('mousedown', handlePointer);
+  }, []);
+
+  const filteredPrograms = sortedPrograms.filter((program) => program.name.toLowerCase().includes(query.trim().toLowerCase()));
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        className={className}
+        value={query}
+        placeholder={placeholder}
+        onFocus={() => setIsOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setIsOpen(true);
+          if (allowEmpty && event.target.value === '') {
+            onChange('');
+          }
+        }}
+      />
+      {isOpen && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-line bg-white shadow-lg">
+          {allowEmpty && (
+            <button
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm text-graphite hover:bg-frost"
+              onClick={() => {
+                setQuery('');
+                onChange('');
+                setIsOpen(false);
+              }}
+            >
+              {emptyLabel}
+            </button>
+          )}
+          {filteredPrograms.length === 0 && (
+            <div className="px-3 py-2 text-sm text-graphite">No matching programs</div>
+          )}
+          {filteredPrograms.map((program) => (
+            <button
+              key={program.id}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-frost"
+              onClick={() => {
+                setQuery(program.name);
+                onChange(program.id);
+                setIsOpen(false);
+              }}
+            >
+              {program.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfigBar() {
   const { config, updateConfig, dashboard } = useRmsStore();
   const [totalResources, setTotalResources] = useState('');
@@ -280,16 +357,24 @@ function AllocationGrid() {
     tenrox_code: allocation.tenrox_code,
   });
 
+  const handleProgramChange = (allocation, programId) => {
+    const selectedProgram = programs.find((program) => program.id === programId);
+    updateAllocation(allocation.id, {
+      ...allocation,
+      program_id: programId,
+      tenrox_code: selectedProgram?.tenrox_code || allocation.tenrox_code,
+      matching_program_ids: programId ? [] : allocation.matching_program_ids,
+      user_story_title: allocation.user_story_title,
+    });
+  };
+
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Editable Allocation Grid</h2>
         <div className="flex flex-wrap gap-2">
           <SearchableResourceDropdown resources={resources} selectedId={newRow.resource_id} onChange={(id) => setNewRow({ ...newRow, resource_id: id })} />
-          <select className="h-9 rounded-md border border-line bg-white px-2" value={newRow.program_id} onChange={(e) => setNewRow({ ...newRow, program_id: e.target.value })}>
-            <option value="">Program</option>
-            {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
-          </select>
+          <SearchableProgramDropdown programs={programs} selectedId={newRow.program_id} onChange={(id) => setNewRow({ ...newRow, program_id: id })} allowEmpty emptyLabel="Program" />
           <input className="h-9 w-28 rounded-md border border-line px-2" type="number" step="0.1" min="0" value={newRow.story_points} onChange={(e) => setNewRow({ ...newRow, story_points: Number(e.target.value) })} aria-label="Story Points" />
           <button title="Add allocation" className="inline-flex h-9 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white" onClick={() => createAllocation(newRow)}>
             <Plus size={16} /> Add
@@ -332,7 +417,7 @@ function AllocationGrid() {
           <tbody>
             {sortedAllocations.map((allocation) => {
               const draftAllocation = Number(allocation.story_points || 0) * 0.1;
-              const matchingPrograms = allocation.matching_program_ids?.length
+              const matchingPrograms = !allocation.program_id && allocation.matching_program_ids?.length
                 ? programs.filter((program) => allocation.matching_program_ids.includes(program.id))
                 : programs;
               const requiresProgramSelection = !allocation.program_id && allocation.matching_program_ids?.length > 1;
@@ -347,14 +432,13 @@ function AllocationGrid() {
                     </select>
                   </td>
                   <td>
-                    <select
+                    <SearchableProgramDropdown
+                      programs={matchingPrograms}
+                      selectedId={allocation.program_id}
+                      onChange={(programId) => handleProgramChange(allocation, programId)}
                       className={`cell-input ${requiresProgramSelection ? 'border-amber-300 bg-amber-50' : ''}`}
-                      value={allocation.program_id}
-                      onChange={(e) => saveAllocationPatch(allocation, { program_id: e.target.value })}
-                    >
-                      {requiresProgramSelection && <option value="">Select Program</option>}
-                      {matchingPrograms.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
-                    </select>
+                      allowEmpty={requiresProgramSelection}
+                    />
                   </td>
                   <td className="whitespace-nowrap text-sm text-graphite">{allocation.tenrox_code || 'N/A'}</td>
                   <td className="min-w-[320px] max-w-xl text-sm text-graphite">{allocation.user_story_title || ''}</td>
@@ -377,7 +461,7 @@ function AllocationGrid() {
 }
 
 function ImportPanel() {
-  const { importFile, commitImport, previewRows, dashboard } = useRmsStore();
+  const { importFile, commitImport, deletePreviewRow, previewRows, dashboard } = useRmsStore();
   const rows = useMemo(() => previewRows, [previewRows]);
 
   return (
@@ -391,9 +475,9 @@ function ImportPanel() {
       </div>
       <div className="grid-shell">
         <table className="data-table">
-          <thead><tr><th>Assigned To</th><th>User Story Title</th><th>Story Points</th><th>Program</th><th>Tenrox</th><th>Allocation</th><th>Hours</th></tr></thead>
+          <thead><tr><th>Assigned To</th><th>User Story Title</th><th>Story Points</th><th>Program</th><th>Tenrox</th><th>Allocation</th><th>Hours</th><th>Action</th></tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan="7" className="text-center text-graphite">No preview rows. Upload an Azure Boards CSV.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan="8" className="text-center text-graphite">No preview rows. Upload an Azure Boards CSV.</td></tr>}
             {rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.assigned_to}</td>
@@ -403,6 +487,11 @@ function ImportPanel() {
                 <td>{row.tenrox_code || 'N/A'}</td>
                 <td>{num(row.allocation_percentage ?? row.story_points * 0.1)}</td>
                 <td>{num((row.allocation_percentage ?? row.story_points * 0.1) * dashboard.totals.monthly_hours)}</td>
+                <td>
+                  <button title="Delete preview row" className="inline-flex h-8 items-center rounded-md border border-rose-200 bg-rose-50 px-2 text-sm font-semibold text-rose-800" onClick={() => deletePreviewRow(row.id)}>
+                    <Trash2 size={15} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

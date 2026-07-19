@@ -93,6 +93,11 @@ export const useRmsStore = create((set, get) => ({
     set({ previewRows, notice: `${previewRows.length} imported rows ready for review.` });
   },
 
+  deletePreviewRow: async (id) => {
+    const previewRows = await get().runAction(() => api.deletePreviewRow(id));
+    set({ previewRows, notice: `${previewRows.length} imported rows ready for review.` });
+  },
+
   commitImport: async () => {
     const allocations = await get().runAction(() => api.commitImport());
     set({ previewRows: [], notice: `${allocations.length} preview row(s) moved to allocation.` });

@@ -647,6 +647,11 @@ export function clearCurrentPlanning(state) {
   state.previewRows = [];
 }
 
+export function deletePreviewRow(state, previewRowId) {
+  state.previewRows = state.previewRows.filter((row) => row.id !== previewRowId);
+  return state.previewRows;
+}
+
 export function listResources(state) {
   return sortResources(state.resources);
 }

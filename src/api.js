@@ -6,6 +6,7 @@ import {
   createProgramRecord,
   createResourceRecord,
   deleteAllocationRecord,
+  deletePreviewRow,
   importProgramsRows,
   importResourcesRows,
   listSnapshots,
@@ -89,9 +90,11 @@ async function exportExcelWorkbook() {
   workbook.creator = 'Energizers RMS';
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet('Resource Plan', { views: [{ state: 'frozen', ySplit: 5 }] });
+  const sheet = workbook.addWorksheet('Resource Plan', { views: [{ state: 'frozen', ySplit: 8 }] });
   sheet.addRows([
     ['Metric', 'Value'],
+    ['Month', exportMonth],
+    ['Year', exportYear],
     ['Total Resource', dashboard.totals.total_resources],
     ['No of Resources', usedResources],
     ['No of Hours/month Per Res', dashboard.totals.monthly_hours],
@@ -101,7 +104,7 @@ async function exportExcelWorkbook() {
   ]);
 
   styleHeader(sheet.getRow(1));
-  styleHeader(sheet.getRow(7));
+  styleHeader(sheet.getRow(9));
 
   exportRows.forEach((program) => {
     sheet.addRow([
@@ -169,6 +172,7 @@ export const api = {
     return withState((state) => previewAzureImport(state, rows));
   },
   preview: async () => readState().previewRows,
+  deletePreviewRow: async (id) => withState((state) => deletePreviewRow(state, id)),
   commitImport: async () => withState((state) => commitPreviewRows(state)),
   clearCurrentPlanning: async () => withState((state) => clearCurrentPlanning(state)),
   exportExcel: async () => exportExcelWorkbook(),
