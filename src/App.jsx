@@ -1,18 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Database, Download, FileSpreadsheet, Plus, RefreshCcw, Save, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarCog, ChartPie, Database, Download, FileSpreadsheet, Gauge, LayoutDashboard, Plus, RefreshCcw, Save, TableProperties, Trash2, Upload, UsersRound } from 'lucide-react';
 import { api } from './api.js';
 import { useRmsStore } from './store.js';
 import { num, pct } from './lib/format.js';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const YEAR_OPTIONS = Array.from({ length: 11 }, (_, index) => 2026 + index);
+const resourceSummaryPoints = (value) => String(Math.round((Number(value) || 0) * 10));
+const prioritizeKarthikeyan = (summary) => {
+  const entries = String(summary || '').split(', ');
+  const index = entries.findIndex((entry) => {
+    const nameStart = entry.lastIndexOf(' (');
+    const name = (nameStart < 0 ? entry : entry.slice(0, nameStart)).trim();
+    return name.split(/\s+/)[0].toLowerCase() === 'karthikeyan';
+  });
+  if (index <= 0) return summary;
+  return [entries[index], ...entries.slice(0, index), ...entries.slice(index + 1)].join(', ');
+};
 
-function Stat({ label, value, subtext }) {
+function Stat({ label, value, subtext, icon: Icon, tone = 'blue', percentage }) {
+  const ringValue = percentage === undefined ? null : Math.min(100, Math.max(0, Number(percentage) || 0));
+  const ringLabel = ringValue === null ? '' : `${Number(ringValue.toFixed(1))}%`;
+
   return (
-    <div className="rounded-lg border border-line bg-white p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-graphite">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-ink">{value}</div>
-      {subtext && <div className="mt-1 text-sm text-graphite">{subtext}</div>}
+    <div className={`metric-card metric-card-${tone}`}>
+      <div className="metric-icon"><Icon size={22} /></div>
+      <div className="metric-copy">
+        <div className="metric-label">{label}</div>
+        <div className="metric-value">{value}</div>
+        {subtext && <div className="metric-subtext">{subtext}</div>}
+      </div>
+      {ringValue !== null && (
+        <div className={`metric-ring metric-ring-${tone}`} style={{ '--ring-value': `${ringValue}%` }} role="img" aria-label={`${label}: ${ringLabel}`}>
+          <span>{ringLabel}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -204,76 +226,28 @@ function ConfigBar() {
   if (!config) return null;
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-white p-4">
-      <label className="grid gap-1 text-sm">
-        <span className="font-medium text-graphite">Total Resources</span>
-        <input className="h-10 w-32 rounded-md border border-line px-3" type="number" step="0.25" value={totalResources} onChange={(event) => setTotalResources(event.target.value)} />
-      </label>
-      <label className="grid gap-1 text-sm">
-        <span className="font-medium text-graphite">Monthly Hours</span>
-        <select className="h-10 w-32 rounded-md border border-line bg-white px-3" value={monthlyHours} onChange={(event) => setMonthlyHours(event.target.value)}>
-          <option value="">Select</option>
-          {[168, 176, 184].map((hours) => <option key={hours} value={hours}>{hours}</option>)}
-        </select>
-      </label>
-      <label className="grid gap-1 text-sm">
-        <span className="font-medium text-graphite">Month</span>
-        <select className="h-10 w-36 rounded-md border border-line bg-white px-3" value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))}>
-          {MONTH_NAMES.map((month, index) => <option key={month} value={index}>{month}</option>)}
-        </select>
-      </label>
-      <label className="grid gap-1 text-sm">
-        <span className="font-medium text-graphite">Year</span>
-        <select className="h-10 w-28 rounded-md border border-line bg-white px-3" value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
-          {YEAR_OPTIONS.map((year) => <option key={year} value={year}>{year}</option>)}
-        </select>
-      </label>
-      <button
-        title="Save configuration"
-        className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-white"
-        onClick={() => updateConfig({
-          total_resources: totalResources === '' ? '' : Number(totalResources),
-          monthly_hours: monthlyHours === '' ? '' : Number(monthlyHours),
-          selected_month: selectedMonth,
-          selected_year: selectedYear,
-        })}
-      >
-        <Save size={16} /> Save
-      </button>
-      {dashboard && (
-        <div className="ml-auto text-sm text-graphite">
-          Total capacity = <strong>{num((Number(totalResources) || 0) * (Number(monthlyHours) || 0))} hrs</strong>
-        </div>
-      )}
-    </div>
+    <section className="section-card config-card">
+      <div className="section-heading compact-heading"><div className="section-icon"><CalendarCog size={20} /></div><div><h2>Planning Configuration</h2><p>Set your planning period and capacity details.</p></div></div>
+      <div className="config-controls">
+        <label className="field-label"><span>Total Resources</span><input className="form-control w-32" type="number" step="0.25" value={totalResources} onChange={(event) => setTotalResources(event.target.value)} /></label>
+        <label className="field-label"><span>Monthly Hours</span><select className="form-control w-32" value={monthlyHours} onChange={(event) => setMonthlyHours(event.target.value)}><option value="">Select</option>{[168, 176, 184].map((hours) => <option key={hours} value={hours}>{hours}</option>)}</select></label>
+        <label className="field-label"><span>Month</span><select className="form-control w-36" value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))}>{MONTH_NAMES.map((month, index) => <option key={month} value={index}>{month}</option>)}</select></label>
+        <label className="field-label"><span>Year</span><select className="form-control w-28" value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>{YEAR_OPTIONS.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
+        <button title="Save configuration" className="button-primary h-10" onClick={() => updateConfig({ total_resources: totalResources === '' ? '' : Number(totalResources), monthly_hours: monthlyHours === '' ? '' : Number(monthlyHours), selected_month: selectedMonth, selected_year: selectedYear })}><Save size={16} /> Save</button>
+        {dashboard && <div className="capacity-callout"><Database size={21} /><span>Total capacity = <strong>{num((Number(totalResources) || 0) * (Number(monthlyHours) || 0))} hrs</strong></span></div>}
+      </div>
+    </section>
   );
 }
 
 function MasterDataImportPanel() {
   const { importResources, importPrograms } = useRmsStore();
   return (
-    <section className="grid gap-3 rounded-lg border border-line bg-white p-4">
-      <div>
-        <h2 className="text-lg font-semibold">Master Data Import</h2>
-      </div>
-      <p className="text-sm text-graphite">Load resources and programs before importing Azure stories.</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="flex min-h-24 cursor-pointer items-center justify-between gap-4 rounded-lg border border-line bg-frost p-4">
-          <div>
-            <div className="font-semibold">Resources File</div>
-            <div className="text-sm text-graphite">Resource Name, Email, Region</div>
-          </div>
-          <span className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white"><Upload size={16} /> Upload</span>
-          <input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importResources(e.target.files[0])} />
-        </label>
-        <label className="flex min-h-24 cursor-pointer items-center justify-between gap-4 rounded-lg border border-line bg-frost p-4">
-          <div>
-            <div className="font-semibold">Programs File</div>
-            <div className="text-sm text-graphite">Program Name, Tenrox Code</div>
-          </div>
-          <span className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white"><Upload size={16} /> Upload</span>
-          <input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importPrograms(e.target.files[0])} />
-        </label>
+    <section className="section-card">
+      <div className="section-heading"><div className="section-icon"><Database size={20} /></div><div><h2>Master Data Import</h2><p>Load resources and programs before importing Azure stories.</p></div></div>
+      <div className="upload-grid">
+        <label className="upload-card upload-card-blue"><div className="upload-card-icon"><UsersRound size={24} /></div><div className="upload-card-copy"><strong>Resources File</strong><span>Resource Name, Email, Region</span></div><span className="upload-action"><Upload size={16} /> Upload File</span><input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importResources(e.target.files[0])} /></label>
+        <label className="upload-card upload-card-teal"><div className="upload-card-icon"><TableProperties size={24} /></div><div className="upload-card-copy"><strong>Programs File</strong><span>Program Name, Tenrox Code</span></div><span className="upload-action"><Upload size={16} /> Upload File</span><input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importPrograms(e.target.files[0])} /></label>
       </div>
     </section>
   );
@@ -286,32 +260,36 @@ function Dashboard() {
   return (
     <section className="grid gap-4">
       <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Total Capacity" value={`${num(totals.total_capacity_hours)} hrs`} subtext={`${num(totals.total_resources)} resources`} />
-        <Stat label="Used Capacity" value={`${num(totals.used_capacity_hours)} hrs`} subtext={`${num(totals.used_capacity)} resource FTE`} />
-        <Stat label="Remaining" value={`${num(totals.remaining_capacity_hours)} hrs`} subtext={`${num(totals.remaining_capacity)} resource FTE`} />
-        <Stat label="Monthly Hours" value={`${num(totals.monthly_hours)} hrs`} subtext="Configured monthly hours" />
+        <Stat icon={UsersRound} tone="blue" label="Total Capacity" value={`${num(totals.total_capacity_hours)} hrs`} subtext={`${num(totals.total_resources)} resources`} />
+        <Stat icon={ChartPie} tone="teal" label="Used Capacity" value={`${num(totals.used_capacity_hours)} hrs`} subtext={`${num(totals.used_capacity)} resource FTE`} percentage={totals.total_capacity_hours > 0 ? (totals.used_capacity_hours / totals.total_capacity_hours) * 100 : 0} />
+        <Stat icon={Gauge} tone="amber" label="Remaining Capacity" value={`${num(totals.remaining_capacity_hours)} hrs`} subtext={`${num(totals.remaining_capacity)} resource FTE`} percentage={totals.total_capacity_hours > 0 ? (totals.remaining_capacity_hours / totals.total_capacity_hours) * 100 : 0} />
+        <Stat icon={BarChart3} tone="purple" label="Monthly Hours" value={`${num(totals.monthly_hours)} hrs`} subtext="Configured monthly hours" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="grid-shell">
-          <table className="data-table compact-table">
+      <div className="summary-layout grid gap-4 lg:grid-cols-2">
+        <div className="table-card"><div className="table-card-heading"><UsersRound size={16} /> Resource Summary</div>
+          <table className="data-table compact-table summary-table resource-summary-table">
+            <colgroup><col style={{ width: '32%' }} /><col style={{ width: '20%' }} /><col style={{ width: '16%' }} /><col style={{ width: '16%' }} /><col style={{ width: '16%' }} /></colgroup>
             <thead><tr><th>Resource</th><th>Region</th><th>Allocation</th><th>Remaining</th><th>Hours</th></tr></thead>
             <tbody>
+              {dashboard.resource_utilization.length === 0 && <tr><td colSpan="5" className="empty-state"><Database size={22} /><strong>No data available</strong><span>Upload resource and program files to view summary.</span></td></tr>}
               {dashboard.resource_utilization.map((resource) => (
                 <tr key={resource.id}>
                   <td className="font-medium">{resource.name}</td>
                   <td>{resource.region}</td>
-                  <td>{num(resource.allocation_percentage)}</td>
-                  <td>{num(resource.remaining_capacity * 10)}</td>
+                  <td>{resourceSummaryPoints(resource.allocation_percentage)}</td>
+                  <td>{resourceSummaryPoints(resource.remaining_capacity)}</td>
                   <td>{num(resource.allocated_hours)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="grid-shell">
-          <table className="data-table compact-table">
+        <div className="table-card"><div className="table-card-heading"><LayoutDashboard size={16} /> Program Summary</div>
+          <table className="data-table compact-table summary-table program-summary-table">
+            <colgroup><col style={{ width: '16%' }} /><col style={{ width: '10%' }} /><col style={{ width: '7%' }} /><col style={{ width: '6%' }} /><col style={{ width: '7%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /><col style={{ width: '24%' }} /></colgroup>
             <thead><tr><th>Program</th><th>Tenrox</th><th>India</th><th>USA</th><th>Europe</th><th>No of Resources</th><th>Forecast Hours</th><th>% of Resources</th><th>Resource Summary</th></tr></thead>
             <tbody>
+              {dashboard.program_summary.filter((program) => Number(program.total_program_resources) > 0).length === 0 && <tr><td colSpan="9" className="empty-state"><Database size={22} /><strong>No data available</strong><span>Upload data to view program summary.</span></td></tr>}
               {dashboard.program_summary.map((program) => (
                 <tr key={program.id}>
                   <td className="font-medium">{program.name}</td>
@@ -322,7 +300,7 @@ function Dashboard() {
                   <td>{num(program.no_of_resources)}</td>
                   <td>{num(program.forecast_hours)}</td>
                   <td>{pct(program.percent_of_total_resources)}</td>
-                  <td className="max-w-lg text-sm text-graphite">{program.resource_allocation_summary}</td>
+                  <td className="max-w-lg text-sm text-graphite">{prioritizeKarthikeyan(program.resource_allocation_summary)}</td>
                 </tr>
               ))}
             </tbody>
@@ -371,7 +349,7 @@ function AllocationGrid() {
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Editable Allocation Grid</h2>
+        <div className="section-heading section-heading-inline"><div className="section-icon section-icon-violet"><TableProperties size={20} /></div><div><h2>Editable Allocation Grid</h2><p>Manage resource allocations and story points.</p></div></div>
         <div className="flex flex-wrap gap-2">
           <SearchableResourceDropdown resources={resources} selectedId={newRow.resource_id} onChange={(id) => setNewRow({ ...newRow, resource_id: id })} />
           <SearchableProgramDropdown programs={programs} selectedId={newRow.program_id} onChange={(id) => setNewRow({ ...newRow, program_id: id })} allowEmpty emptyLabel="Program" />
@@ -415,6 +393,7 @@ function AllocationGrid() {
             </tr>
           </thead>
           <tbody>
+            {sortedAllocations.length === 0 && <tr><td colSpan="8" className="empty-state"><TableProperties size={22} /><strong>No data available</strong><span>Add resources to start planning allocations.</span></td></tr>}
             {sortedAllocations.map((allocation) => {
               const draftAllocation = Number(allocation.story_points || 0) * 0.1;
               const matchingPrograms = !allocation.program_id && allocation.matching_program_ids?.length
@@ -438,6 +417,7 @@ function AllocationGrid() {
                       onChange={(programId) => handleProgramChange(allocation, programId)}
                       className={`cell-input ${requiresProgramSelection ? 'border-amber-300 bg-amber-50' : ''}`}
                       allowEmpty={requiresProgramSelection}
+                      placeholder={allocation.program_id ? 'Search program' : allocation.program_name === 'Unknown' ? 'Unknown · search program' : requiresProgramSelection ? 'Select Program' : 'Search program'}
                     />
                   </td>
                   <td className="whitespace-nowrap text-sm text-graphite">{allocation.tenrox_code || 'N/A'}</td>
@@ -467,7 +447,7 @@ function ImportPanel() {
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Azure Boards Import</h2>
+        <div className="section-heading section-heading-inline"><div className="section-icon section-icon-amber"><Database size={20} /></div><div><h2>Azure Boards Import</h2><p>Review stories before moving them into allocation planning.</p></div></div>
         <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold">
           <Upload size={16} /> Upload CSV
           <input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])} />
@@ -513,16 +493,18 @@ function App() {
   return (
     <main className="min-h-screen">
       <Toasts />
-      <div className="mx-auto grid w-[95vw] max-w-[1800px] gap-6 px-4 py-6">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Energizers Resource Management System</h1>
+      <div className="app-shell">
+        <header className="app-header">
+          <div className="brand-lockup">
+            <img className="cat-logo" src={`${import.meta.env.BASE_URL}cat-logo.png`} alt="CAT" />
+            <div className="brand-divider" />
+            <div><h1>SITRA</h1><p>SIT Resource Allocation Platform</p></div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button title="Refresh data" className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={load}><RefreshCcw size={16} /> Refresh</button>
-            <button title="Export Excel" className="inline-flex h-10 items-center gap-2 rounded-md bg-ink px-3 text-sm font-semibold text-white" onClick={() => api.exportExcel()}><Download size={16} /> Export</button>
-            <button title="Save Snapshot" className="inline-flex h-10 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={() => saveSnapshot()}>Save Snapshot</button>
-            <button title="Load Snapshot" className="inline-flex h-10 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold" onClick={() => setShowSnapshots((current) => !current)}>Load Snapshot</button>
+          <div className="header-actions">
+            <button title="Refresh data" className="button-secondary" onClick={load}><RefreshCcw size={16} /> Refresh</button>
+            <button title="Export Excel" className="button-primary" onClick={() => api.exportExcel()}><Download size={16} /> Export</button>
+            <button title="Save Snapshot" className="button-secondary" onClick={() => saveSnapshot()}><Save size={16} /> Save Snapshot</button>
+            <button title="Load Snapshot" className="button-secondary" onClick={() => setShowSnapshots((current) => !current)}><Database size={16} /> Load Snapshot</button>
             {showSnapshots && (
               <select className="h-10 rounded-md border border-line bg-white px-3 text-sm" defaultValue="" onChange={(e) => e.target.value && loadSnapshot(e.target.value)}>
                 <option value="">Select Snapshot</option>

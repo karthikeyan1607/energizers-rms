@@ -167,6 +167,10 @@ function formatAllocationSummaryValue(value) {
   return Number(round4(value).toFixed(2)).toString();
 }
 
+function formatAllocationFte(value) {
+  return round4(value).toFixed(1);
+}
+
 function ensureResourceCapacity(state, resourceId, nextAllocations, excludedAllocationId = null) {
   const resource = state.resources.find((item) => item.id === resourceId);
   const maxCapacity = Number.isFinite(Number(resource?.max_capacity)) ? Number(resource.max_capacity) : 1;
@@ -308,7 +312,7 @@ function generateProgramResourceSummary(programId, allocations) {
 
   return [...groupedAllocations.values()]
     .sort((left, right) => right.allocation_percentage - left.allocation_percentage || left.resource_name.localeCompare(right.resource_name))
-    .map((allocation) => `${firstNameOnly(allocation.resource_name)} (${formatAllocationSummaryValue(allocation.allocation_percentage)})`)
+    .map((allocation) => `${firstNameOnly(allocation.resource_name)} (${formatAllocationFte(allocation.allocation_percentage)})`)
     .join(', ');
 }
 
@@ -402,15 +406,17 @@ export function importResourcesRows(state, rows) {
 export function importProgramsRows(state, rows) {
   const previousPrograms = state.programs;
   const nextPrograms = [];
+  const usedProgramIds = new Set();
   rows.forEach((row) => {
     const name = normalizeName(row['Program Name'] ?? row.program_name ?? row.ProgramName ?? row.name);
     if (!name) return;
     const tenrox_code = normalizeTenrox(row['Tenrox Code'] ?? row['Tenrox Project ID'] ?? row.tenrox_code);
-    const existing = previousPrograms.find((program) => normalizeMatch(program.name) === normalizeMatch(name))
-      || previousPrograms.find((program) => normalizeTenrox(program.tenrox_code) === tenrox_code);
+    const existing = previousPrograms.find((program) => normalizeMatch(program.name) === normalizeMatch(name));
     if (nextPrograms.some((program) => normalizeMatch(program.name) === normalizeMatch(name))) return;
+    const id = existing?.id && !usedProgramIds.has(existing.id) ? existing.id : makeId('program');
+    usedProgramIds.add(id);
     nextPrograms.push({
-      id: existing?.id || makeId('program'),
+      id,
       name,
       tenrox_code,
     });
