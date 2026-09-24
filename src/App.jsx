@@ -286,7 +286,7 @@ function Dashboard() {
         </div>
         <div className="table-card"><div className="table-card-heading"><LayoutDashboard size={16} /> Program Summary</div>
           <table className="data-table compact-table summary-table program-summary-table">
-            <colgroup><col style={{ width: '16%' }} /><col style={{ width: '10%' }} /><col style={{ width: '7%' }} /><col style={{ width: '6%' }} /><col style={{ width: '7%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /><col style={{ width: '24%' }} /></colgroup>
+            <colgroup><col style={{ width: '18%' }} /><col style={{ width: '11%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '8%' }} /><col style={{ width: '11%' }} /><col style={{ width: '11%' }} /><col style={{ width: '10%' }} /><col style={{ width: '17%' }} /></colgroup>
             <thead><tr><th>Program</th><th>Tenrox</th><th>India</th><th>USA</th><th>Europe</th><th>No of Resources</th><th>Forecast Hours</th><th>% of Resources</th><th>Resource Summary</th></tr></thead>
             <tbody>
               {dashboard.program_summary.filter((program) => Number(program.total_program_resources) > 0).length === 0 && <tr><td colSpan="9" className="empty-state"><Database size={22} /><strong>No data available</strong><span>Upload data to view program summary.</span></td></tr>}
@@ -498,7 +498,7 @@ function App() {
           <div className="brand-lockup">
             <img className="cat-logo" src={`${import.meta.env.BASE_URL}cat-logo.png`} alt="CAT" />
             <div className="brand-divider" />
-            <div><h1>SITRA</h1><p>SIT Resource Allocation Platform</p></div>
+            <div><img className="sitra-wordmark" src={`${import.meta.env.BASE_URL}sitra-wordmark.png`} alt="SITRA" /><p>SIT Resource Allocation Platform</p></div>
           </div>
           <div className="header-actions">
             <button title="Refresh data" className="button-secondary" onClick={load}><RefreshCcw size={16} /> Refresh</button>
