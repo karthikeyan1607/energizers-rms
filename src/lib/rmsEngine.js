@@ -30,10 +30,6 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function firstNameOnly(value) {
-  return normalizeName(value).split(' ')[0] || '';
-}
-
 function mergeStoryTitles(...values) {
   const titles = values
     .flatMap((value) => String(value || '').split(' | '))
@@ -311,8 +307,13 @@ function generateProgramResourceSummary(programId, allocations) {
     }, new Map());
 
   return [...groupedAllocations.values()]
-    .sort((left, right) => right.allocation_percentage - left.allocation_percentage || left.resource_name.localeCompare(right.resource_name))
-    .map((allocation) => `${firstNameOnly(allocation.resource_name)} (${formatAllocationFte(allocation.allocation_percentage)})`)
+    .sort((left, right) => {
+      const leftIsKarthikeyan = normalizeMatch(left.resource_name).split(' ')[0] === 'karthikeyan';
+      const rightIsKarthikeyan = normalizeMatch(right.resource_name).split(' ')[0] === 'karthikeyan';
+      if (leftIsKarthikeyan !== rightIsKarthikeyan) return leftIsKarthikeyan ? -1 : 1;
+      return right.allocation_percentage - left.allocation_percentage || left.resource_name.localeCompare(right.resource_name);
+    })
+    .map((allocation) => `${allocation.resource_name} (${formatAllocationFte(allocation.allocation_percentage)})`)
     .join(', ');
 }
 
@@ -646,6 +647,43 @@ export function createResourceRecord(state, payload) {
 
 export function createProgramRecord(state, payload) {
   return upsertProgramRecord(state, payload, { updateExisting: true });
+}
+
+export function addManagedProgramRecord(state, payload) {
+  const name = normalizeName(payload.name);
+  const tenroxCode = normalizeName(payload.tenrox_code);
+  if (!name || !tenroxCode) {
+    throw new Error('Program Name and Tenrox Code are required.');
+  }
+
+  const duplicate = state.programs.some((program) => (
+    normalizeMatch(program.name) === normalizeMatch(name)
+    && normalizeMatch(program.tenrox_code) === normalizeMatch(tenroxCode)
+  ));
+  if (duplicate) throw new Error('Program already exists.');
+
+  const program = { id: makeId('program'), name, tenrox_code: tenroxCode };
+  state.programs.push(program);
+  return program;
+}
+
+export function removeManagedProgramRecord(state, payload) {
+  const name = normalizeName(payload.name);
+  const tenroxCode = normalizeName(payload.tenrox_code);
+  if (!name || !tenroxCode) {
+    throw new Error('Program Name and Tenrox Code are required.');
+  }
+
+  const programIndex = state.programs.findIndex((program) => (
+    normalizeMatch(program.name) === normalizeMatch(name)
+    && normalizeMatch(program.tenrox_code) === normalizeMatch(tenroxCode)
+  ));
+  if (programIndex === -1) {
+    throw new Error('Program Name and Tenrox Code do not match an existing program. Nothing was removed.');
+  }
+
+  const [removedProgram] = state.programs.splice(programIndex, 1);
+  return removedProgram;
 }
 
 export function clearCurrentPlanning(state) {

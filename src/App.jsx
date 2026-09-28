@@ -6,17 +6,8 @@ import { num, pct } from './lib/format.js';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const YEAR_OPTIONS = Array.from({ length: 11 }, (_, index) => 2026 + index);
-const resourceSummaryPoints = (value) => String(Math.round((Number(value) || 0) * 10));
-const prioritizeKarthikeyan = (summary) => {
-  const entries = String(summary || '').split(', ');
-  const index = entries.findIndex((entry) => {
-    const nameStart = entry.lastIndexOf(' (');
-    const name = (nameStart < 0 ? entry : entry.slice(0, nameStart)).trim();
-    return name.split(/\s+/)[0].toLowerCase() === 'karthikeyan';
-  });
-  if (index <= 0) return summary;
-  return [entries[index], ...entries.slice(0, index), ...entries.slice(index + 1)].join(', ');
-};
+const resourceSummaryPoints = (value) => Math.min(10, Math.max(0, Math.round((Number(value) || 0) * 10)));
+const resourceSummaryRemainingPoints = (allocation) => 10 - resourceSummaryPoints(allocation);
 
 function Stat({ label, value, subtext, icon: Icon, tone = 'blue', percentage }) {
   const ringValue = percentage === undefined ? null : Math.min(100, Math.max(0, Number(percentage) || 0));
@@ -241,13 +232,55 @@ function ConfigBar() {
 }
 
 function MasterDataImportPanel() {
-  const { importResources, importPrograms } = useRmsStore();
+  const { importResources, importPrograms, addProgram, removeProgram } = useRmsStore();
+  const [addName, setAddName] = useState('');
+  const [addTenrox, setAddTenrox] = useState('');
+  const [removeName, setRemoveName] = useState('');
+  const [removeTenrox, setRemoveTenrox] = useState('');
+
+  const handleAddProgram = async (event) => {
+    event.preventDefault();
+    try {
+      await addProgram({ name: addName, tenrox_code: addTenrox });
+      setAddName('');
+      setAddTenrox('');
+    } catch {
+      // The store surfaces validation and duplicate errors through the existing toast.
+    }
+  };
+
+  const handleRemoveProgram = async (event) => {
+    event.preventDefault();
+    try {
+      await removeProgram({ name: removeName, tenrox_code: removeTenrox });
+      setRemoveName('');
+      setRemoveTenrox('');
+    } catch {
+      // The store surfaces validation and mismatch errors through the existing toast.
+    }
+  };
+
   return (
     <section className="section-card">
       <div className="section-heading"><div className="section-icon"><Database size={20} /></div><div><h2>Master Data Import</h2><p>Load resources and programs before importing Azure stories.</p></div></div>
       <div className="upload-grid">
         <label className="upload-card upload-card-blue"><div className="upload-card-icon"><UsersRound size={24} /></div><div className="upload-card-copy"><strong>Resources File</strong><span>Resource Name, Email, Region</span></div><span className="upload-action"><Upload size={16} /> Upload File</span><input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importResources(e.target.files[0])} /></label>
         <label className="upload-card upload-card-teal"><div className="upload-card-icon"><TableProperties size={24} /></div><div className="upload-card-copy"><strong>Programs File</strong><span>Program Name, Tenrox Code</span></div><span className="upload-action"><Upload size={16} /> Upload File</span><input className="hidden" type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && importPrograms(e.target.files[0])} /></label>
+      </div>
+      <div className="program-management">
+        <h3>Program Management</h3>
+        <div className="program-management-forms">
+          <form className="program-management-form" onSubmit={handleAddProgram}>
+            <label className="field-label"><span>Program Name</span><input className="form-control" value={addName} onChange={(event) => setAddName(event.target.value)} /></label>
+            <label className="field-label"><span>Tenrox Code</span><input className="form-control" value={addTenrox} onChange={(event) => setAddTenrox(event.target.value)} /></label>
+            <button className="program-action-add" type="submit"><Plus size={16} /> Add</button>
+          </form>
+          <form className="program-management-form" onSubmit={handleRemoveProgram}>
+            <label className="field-label"><span>Program Name</span><input className="form-control" value={removeName} onChange={(event) => setRemoveName(event.target.value)} /></label>
+            <label className="field-label"><span>Tenrox Code</span><input className="form-control" value={removeTenrox} onChange={(event) => setRemoveTenrox(event.target.value)} /></label>
+            <button className="program-action-remove" type="submit"><Trash2 size={15} /> Remove</button>
+          </form>
+        </div>
       </div>
     </section>
   );
@@ -277,7 +310,7 @@ function Dashboard() {
                   <td className="font-medium">{resource.name}</td>
                   <td>{resource.region}</td>
                   <td>{resourceSummaryPoints(resource.allocation_percentage)}</td>
-                  <td>{resourceSummaryPoints(resource.remaining_capacity)}</td>
+                  <td>{resourceSummaryRemainingPoints(resource.allocation_percentage)}</td>
                   <td>{num(resource.allocated_hours)}</td>
                 </tr>
               ))}
@@ -300,7 +333,7 @@ function Dashboard() {
                   <td>{num(program.no_of_resources)}</td>
                   <td>{num(program.forecast_hours)}</td>
                   <td>{pct(program.percent_of_total_resources)}</td>
-                  <td className="max-w-lg text-sm text-graphite">{prioritizeKarthikeyan(program.resource_allocation_summary)}</td>
+                  <td className="max-w-lg text-sm text-graphite">{program.resource_allocation_summary}</td>
                 </tr>
               ))}
             </tbody>

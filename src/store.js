@@ -76,6 +76,20 @@ export const useRmsStore = create((set, get) => ({
     await get().load({ silent: true });
   },
 
+  addProgram: async (body) => {
+    const program = await get().runAction(() => api.addProgram(body));
+    set({ notice: 'Program added successfully.', error: '' });
+    await get().load({ silent: true });
+    return program;
+  },
+
+  removeProgram: async (body) => {
+    const program = await get().runAction(() => api.removeProgram(body));
+    set({ notice: 'Program removed successfully.', error: '' });
+    await get().load({ silent: true });
+    return program;
+  },
+
   importResources: async (file) => {
     const result = await get().runAction(() => api.importResources(file));
     set({ notice: `${result.imported} resources imported or updated.` });

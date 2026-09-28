@@ -81,6 +81,17 @@ button { cursor: pointer; }
 .upload-card-copy span { color: #5d718b; font-size: 11px; }
 .upload-action { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-width: 132px; justify-content: center; padding: 9px 12px; border: 1px dashed #4386d1; border-radius: 6px; background: rgba(255,255,255,.72); color: #1757a2; font-size: 12px; font-weight: 800; }
 .upload-card-teal .upload-action { border-color: #3b9b7b; color: #08785f; }
+.program-management { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+.program-management h3 { margin: 0; color: #102b4e; font-size: 13px; font-weight: 650; }
+.program-management-forms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.program-management-form { display: flex; min-width: 0; align-items: flex-end; gap: 8px; }
+.program-management-form .field-label { flex: 1 1 0; min-width: 0; }
+.program-management-form .form-control { width: 100%; }
+.program-action-add, .program-action-remove { display: inline-flex; height: 38px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; padding: 0 12px; font-size: 12px; font-weight: 650; }
+.program-action-add { border: 1px solid #07825e; background: #07825e; color: white; }
+.program-action-add:hover { background: #066f51; }
+.program-action-remove { border: 1px solid #e5a9ad; background: #fffdfd; color: #a42b37; }
+.program-action-remove:hover { border-color: #d98b92; background: #fff5f5; }
 
 .config-card { padding: 13px 16px; }
 .compact-heading .section-icon { width: 34px; height: 34px; }
@@ -247,6 +258,7 @@ button[title="Clear Current Planning"]:hover { border-color: #d98b92; background
   .header-actions { width: 100%; justify-content: flex-start; }
   .capacity-callout { margin-left: 0; }
   .upload-grid { grid-template-columns: 1fr; }
+  .program-management-forms { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1023px) {
@@ -260,6 +272,9 @@ button[title="Clear Current Planning"]:hover { border-color: #d98b92; background
   .button-primary, .button-secondary { width: 100%; }
   .upload-card { align-items: flex-start; flex-wrap: wrap; }
   .upload-action { margin-left: 53px; width: calc(100% - 53px); }
+  .program-management-form { flex-wrap: wrap; }
+  .program-management-form .field-label { flex-basis: 130px; }
+  .program-action-add, .program-action-remove { margin-left: auto; }
   .section-card { padding: 12px; }
   .config-controls > * { flex: 1 1 130px; }
   .config-controls .capacity-callout { flex-basis: 100%; }
