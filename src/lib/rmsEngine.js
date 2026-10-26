@@ -68,6 +68,7 @@ function defaultState() {
     resources: [],
     programs: [],
     allocations: [],
+    overtime_entries: [],
     previewRows: [],
     config: {
       id: 'config',
@@ -91,6 +92,7 @@ export function readState() {
       resources: Array.isArray(parsed.resources) ? parsed.resources : [],
       programs: Array.isArray(parsed.programs) ? parsed.programs : [],
       allocations: Array.isArray(parsed.allocations) ? parsed.allocations : [],
+      overtime_entries: Array.isArray(parsed.overtime_entries) ? parsed.overtime_entries : [],
       previewRows: Array.isArray(parsed.previewRows) ? parsed.previewRows : [],
     };
   } catch {
@@ -152,7 +154,7 @@ function sortPrograms(programs) {
 }
 
 function computeAllocation(storyPoints) {
-  return round4((Number(storyPoints) || 0) * 0.1);
+  return (Number(storyPoints) || 0) / 10;
 }
 
 function computeHours(storyPoints, monthlyHours) {
@@ -164,7 +166,8 @@ function formatAllocationSummaryValue(value) {
 }
 
 function formatAllocationFte(value) {
-  return round4(value).toFixed(1);
+  const formatted = round4(value).toFixed(4).replace(/0+$/, '');
+  return formatted.endsWith('.') ? `${formatted}0` : formatted;
 }
 
 function ensureResourceCapacity(state, resourceId, nextAllocations, excludedAllocationId = null) {
@@ -492,7 +495,7 @@ function mergeAllocation(state, payload, existingId = null) {
             ...allocation,
             resource_id: resourceId,
             program_id: programId,
-            story_points: round4(storyPoints),
+            story_points: storyPoints,
             user_story_title: normalizeName(payload.user_story_title),
             matching_program_ids: Array.isArray(payload.matching_program_ids) ? payload.matching_program_ids : [],
             tenrox_code: normalizeTenrox(payload.tenrox_code || allocation.tenrox_code),
@@ -504,7 +507,7 @@ function mergeAllocation(state, payload, existingId = null) {
       id: savedId,
       resource_id: resourceId,
       program_id: programId,
-      story_points: round4(storyPoints),
+      story_points: storyPoints,
       user_story_title: normalizeName(payload.user_story_title),
       matching_program_ids: Array.isArray(payload.matching_program_ids) ? payload.matching_program_ids : [],
       tenrox_code: normalizeTenrox(payload.tenrox_code),
@@ -539,7 +542,7 @@ export function updateAllocationRecord(state, id, payload) {
         ? {
             ...allocation,
             resource_id: payload.resource_id,
-            story_points: round4(Number(payload.story_points)),
+            story_points: Number(payload.story_points),
             user_story_title: payload.user_story_title ?? existing.user_story_title,
             matching_program_ids: payload.matching_program_ids ?? existing.matching_program_ids ?? [],
             tenrox_code: normalizeTenrox(payload.tenrox_code || existing.tenrox_code),
@@ -597,7 +600,7 @@ export function commitPreviewRows(state) {
           id: makeId('allocation'),
           resource_id: resource.id,
           program_id: '',
-          story_points: round4(Number(preview.story_points)),
+          story_points: Number(preview.story_points),
           user_story_title: preview.user_story_title,
           matching_program_ids: preview.matching_program_ids,
           tenrox_code: preview.tenrox_code,
@@ -689,6 +692,30 @@ export function removeManagedProgramRecord(state, payload) {
 export function clearCurrentPlanning(state) {
   state.allocations = [];
   state.previewRows = [];
+}
+
+export function createOvertimeEntryRecord(state, payload) {
+  const resourceName = normalizeName(payload.resource_name);
+  const tenroxCode = normalizeName(payload.tenrox_code);
+  const otHours = Number(payload.ot_hours);
+  if (!resourceName) throw new Error('Resource name is required for an OT entry.');
+  if (!Number.isFinite(otHours) || otHours <= 0) throw new Error('OT hours must be a positive number.');
+  if (!tenroxCode) throw new Error('Tenrox Code is required for an OT entry.');
+
+  if (!Array.isArray(state.overtime_entries)) state.overtime_entries = [];
+  const entry = {
+    id: makeId('overtime'),
+    resource_name: resourceName,
+    ot_hours: otHours,
+    tenrox_code: tenroxCode,
+  };
+  state.overtime_entries.push(entry);
+  return entry;
+}
+
+export function deleteOvertimeEntryRecord(state, id) {
+  state.overtime_entries = (state.overtime_entries || []).filter((entry) => entry.id !== id);
+  return state.overtime_entries;
 }
 
 export function deletePreviewRow(state, previewRowId) {

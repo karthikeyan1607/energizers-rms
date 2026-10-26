@@ -99,6 +99,10 @@ button { cursor: pointer; }
 .field-label { display: grid; gap: 5px; color: #536983; font-size: 11px; font-weight: 600; letter-spacing: .005em; }
 .form-control { height: 38px; border: 1px solid #cedae7; border-radius: 6px; background: #fff; padding: 0 10px; color: #193451; font-weight: 550; }
 .form-control:focus { border-color: #4b82bd; outline: 2px solid rgba(58, 113, 173, .14); }
+.ot-entry-form { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; align-items: end; gap: 10px; }
+.ot-summary-stat { display: grid; gap: 3px; min-width: 150px; padding: 8px 12px; border: 1px solid #d7e1ec; border-radius: 7px; background: #f8fafc; }
+.ot-summary-stat span { color: #667991; font-size: 11px; font-weight: 600; }
+.ot-summary-stat strong { color: #102b4e; font-size: 18px; font-weight: 700; }
 .capacity-callout { margin-left: auto; gap: 8px; min-height: 38px; padding: 0 16px; border: 1px solid #ecd99e; border-radius: 7px; background: #fff8e8; color: #674914; font-size: 12px; }
 .capacity-callout svg { color: #c88708; }
 .capacity-callout strong { color: #754607; }
@@ -259,6 +263,7 @@ button[title="Clear Current Planning"]:hover { border-color: #d98b92; background
   .capacity-callout { margin-left: 0; }
   .upload-grid { grid-template-columns: 1fr; }
   .program-management-forms { grid-template-columns: 1fr; }
+  .ot-entry-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 1023px) {
@@ -273,6 +278,7 @@ button[title="Clear Current Planning"]:hover { border-color: #d98b92; background
   .upload-card { align-items: flex-start; flex-wrap: wrap; }
   .upload-action { margin-left: 53px; width: calc(100% - 53px); }
   .program-management-form { flex-wrap: wrap; }
+  .ot-entry-form { grid-template-columns: 1fr; }
   .program-management-form .field-label { flex-basis: 130px; }
   .program-action-add, .program-action-remove { margin-left: auto; }
   .section-card { padding: 12px; }

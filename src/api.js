@@ -6,8 +6,10 @@ import {
   createAllocationRecord,
   createProgramRecord,
   createResourceRecord,
+  createOvertimeEntryRecord,
   deleteAllocationRecord,
   deletePreviewRow,
+  deleteOvertimeEntryRecord,
   importProgramsRows,
   importResourcesRows,
   listSnapshots,
@@ -82,7 +84,9 @@ function autoWidth(sheet) {
 
 async function exportExcelWorkbook() {
   const { default: ExcelJS } = await import('exceljs');
-  const dashboard = buildDashboard(readState());
+  const state = readState();
+  const dashboard = buildDashboard(state);
+  const overtimeEntries = Array.isArray(state.overtime_entries) ? state.overtime_entries : [];
   const exportRows = dashboard.program_summary.filter((program) => Number(program.total_program_resources) > 0);
   const usedResources = exportRows.reduce((sum, program) => sum + Number(program.total_program_resources || 0), 0);
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -122,9 +126,30 @@ async function exportExcelWorkbook() {
     ]);
   });
 
-  ['B', 'C', 'D', 'E', 'F', 'G'].forEach((column) => {
-    sheet.getColumn(column).numFmt = '0.00';
+  sheet.addRow([]);
+  sheet.addRow([]);
+  const overtimeTitle = sheet.addRow(['Overtime Summary']);
+  overtimeTitle.font = { bold: true, color: { argb: 'FF17365D' }, size: 12 };
+
+  const overtimeMetricsHeader = sheet.addRow(['Metric', 'Value']);
+  styleHeader(overtimeMetricsHeader);
+  const totalOvertimeHours = overtimeEntries.reduce((total, entry) => total + (Number(entry.ot_hours) || 0), 0);
+  const totalOvertimeRow = sheet.addRow(['Total OT Hours', totalOvertimeHours]);
+  totalOvertimeRow.getCell(2).numFmt = '0.00';
+  sheet.addRow(['Number of OT Entries', overtimeEntries.length]);
+
+  sheet.addRow([]);
+  const overtimeTableHeader = sheet.addRow(['Resource Name', 'OT Hours', 'Tenrox Code']);
+  styleHeader(overtimeTableHeader);
+  overtimeEntries.forEach((entry) => {
+    const row = sheet.addRow([entry.resource_name, Number(entry.ot_hours) || 0, entry.tenrox_code]);
+    row.getCell(2).numFmt = '0.00';
   });
+
+  ['C', 'D', 'E', 'F'].forEach((column) => {
+    sheet.getColumn(column).numFmt = '0.00##';
+  });
+  sheet.getColumn('G').numFmt = '0.00';
   sheet.getColumn('H').numFmt = '0.00%';
   sheet.getColumn('I').alignment = { wrapText: true, vertical: 'top' };
   sheet.getColumn('I').width = 64;
@@ -179,6 +204,9 @@ export const api = {
   deletePreviewRow: async (id) => withState((state) => deletePreviewRow(state, id)),
   commitImport: async () => withState((state) => commitPreviewRows(state)),
   clearCurrentPlanning: async () => withState((state) => clearCurrentPlanning(state)),
+  overtimeEntries: async () => readState().overtime_entries,
+  addOvertimeEntry: async (body) => withState((state) => createOvertimeEntryRecord(state, body)),
+  deleteOvertimeEntry: async (id) => withState((state) => deleteOvertimeEntryRecord(state, id)),
   exportExcel: async () => exportExcelWorkbook(),
   saveSnapshot: async () => withState((state) => ({ key: saveSnapshot(state) })),
   listSnapshots: async () => listSnapshots(),

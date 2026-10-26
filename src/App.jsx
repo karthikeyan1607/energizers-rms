@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BarChart3, CalendarCog, ChartPie, Database, Download, FileSpreadsheet, Gauge, LayoutDashboard, Plus, RefreshCcw, Save, TableProperties, Trash2, Upload, UsersRound } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarCog, ChartPie, Clock3, Database, Download, FileSpreadsheet, Gauge, LayoutDashboard, Plus, RefreshCcw, Save, TableProperties, Trash2, Upload, UsersRound } from 'lucide-react';
 import { api } from './api.js';
 import { useRmsStore } from './store.js';
 import { num, pct } from './lib/format.js';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const YEAR_OPTIONS = Array.from({ length: 11 }, (_, index) => 2026 + index);
-const resourceSummaryPoints = (value) => Math.min(10, Math.max(0, Math.round((Number(value) || 0) * 10)));
-const resourceSummaryRemainingPoints = (allocation) => 10 - resourceSummaryPoints(allocation);
+const resourceSummaryPoints = (value) => Number((Math.min(1, Math.max(0, Number(value) || 0)) * 10).toFixed(3));
+const resourceSummaryRemainingPoints = (allocation) => Number((10 - resourceSummaryPoints(allocation)).toFixed(3));
+const preciseAllocation = (value) => {
+  const [whole, fraction] = (Number(value) || 0).toFixed(4).split('.');
+  const decimals = fraction.replace(/0+$/, '').padEnd(2, '0');
+  return `${whole}.${decimals}`;
+};
 
 function Stat({ label, value, subtext, icon: Icon, tone = 'blue', percentage }) {
   const ringValue = percentage === undefined ? null : Math.min(100, Math.max(0, Number(percentage) || 0));
@@ -344,7 +349,7 @@ function Dashboard() {
   );
 }
 
-function AllocationGrid() {
+function AllocationGrid({ overtimeMode, onOvertimeModeChange }) {
   const { dashboard, resources, programs, updateAllocation, createAllocation, deleteAllocation, clearCurrentPlanning } = useRmsStore();
   const [newRow, setNewRow] = useState({ resource_id: '', program_id: '', story_points: 1 });
   const [resourceSort, setResourceSort] = useState('asc');
@@ -384,9 +389,13 @@ function AllocationGrid() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="section-heading section-heading-inline"><div className="section-icon section-icon-violet"><TableProperties size={20} /></div><div><h2>Editable Allocation Grid</h2><p>Manage resource allocations and story points.</p></div></div>
         <div className="flex flex-wrap gap-2">
+          <label className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink">
+            <input type="checkbox" checked={overtimeMode} onChange={(event) => onOvertimeModeChange(event.target.checked)} />
+            Overtime Mode
+          </label>
           <SearchableResourceDropdown resources={resources} selectedId={newRow.resource_id} onChange={(id) => setNewRow({ ...newRow, resource_id: id })} />
           <SearchableProgramDropdown programs={programs} selectedId={newRow.program_id} onChange={(id) => setNewRow({ ...newRow, program_id: id })} allowEmpty emptyLabel="Program" />
-          <input className="h-9 w-28 rounded-md border border-line px-2" type="number" step="0.1" min="0" value={newRow.story_points} onChange={(e) => setNewRow({ ...newRow, story_points: Number(e.target.value) })} aria-label="Story Points" />
+          <input className="h-9 w-28 rounded-md border border-line px-2" type="number" step="any" min="0" value={newRow.story_points} onChange={(e) => setNewRow({ ...newRow, story_points: Number(e.target.value) })} aria-label="Story Points" />
           <button title="Add allocation" className="inline-flex h-9 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white" onClick={() => createAllocation(newRow)}>
             <Plus size={16} /> Add
           </button>
@@ -455,8 +464,8 @@ function AllocationGrid() {
                   </td>
                   <td className="whitespace-nowrap text-sm text-graphite">{allocation.tenrox_code || 'N/A'}</td>
                   <td className="min-w-[320px] max-w-xl text-sm text-graphite">{allocation.user_story_title || ''}</td>
-                  <td><input className="cell-input min-w-[88px]" type="number" step="0.1" min="0" value={allocation.story_points} onChange={(e) => saveAllocationPatch(allocation, { story_points: Number(e.target.value) })} /></td>
-                  <td className="whitespace-nowrap">{num(draftAllocation)}</td>
+                  <td><input className="cell-input min-w-[88px]" type="number" step="any" min="0" value={allocation.story_points} onChange={(e) => saveAllocationPatch(allocation, { story_points: Number(e.target.value) })} /></td>
+                  <td className="whitespace-nowrap">{preciseAllocation(draftAllocation)}</td>
                   <td className="whitespace-nowrap">{num(draftAllocation * (dashboard?.totals.monthly_hours || 0))}</td>
                   <td>
                     <button title="Delete allocation" className="inline-flex h-8 items-center rounded-md border border-rose-200 bg-rose-50 px-2 text-sm font-semibold text-rose-800" onClick={() => deleteAllocation(allocation.id)}>
@@ -466,6 +475,90 @@ function AllocationGrid() {
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function OvertimeManagement() {
+  const { resources, programs, overtimeEntries, addOvertimeEntry, deleteOvertimeEntry } = useRmsStore();
+  const [entry, setEntry] = useState({ resource_name: '', ot_hours: '', tenrox_code: '' });
+  const [formError, setFormError] = useState('');
+  const resourceOptionsId = 'overtime-resource-options';
+  const tenroxOptionsId = 'overtime-tenrox-options';
+  const resourceNames = [...new Set(resources.map((resource) => resource.name).filter(Boolean))];
+  const tenroxCodes = [...new Set(programs.map((program) => program.tenrox_code).filter((code) => code && code !== 'N/A'))];
+  const entries = overtimeEntries || [];
+  const totalHours = entries.reduce((sum, row) => sum + (Number(row.ot_hours) || 0), 0);
+  const grouped = [...entries.reduce((groups, row) => {
+    const key = `${row.resource_name.trim().toLowerCase()}::${row.tenrox_code.trim().toLowerCase()}`;
+    const group = groups.get(key) || { resource_name: row.resource_name, tenrox_code: row.tenrox_code, ot_hours: 0, entry_count: 0 };
+    group.ot_hours += Number(row.ot_hours) || 0;
+    group.entry_count += 1;
+    groups.set(key, group);
+    return groups;
+  }, new Map()).values()];
+
+  const submitEntry = async (event) => {
+    event.preventDefault();
+    setFormError('');
+    try {
+      await addOvertimeEntry(entry);
+      setEntry({ resource_name: '', ot_hours: '', tenrox_code: '' });
+    } catch (error) {
+      setFormError(error.message || 'Check the OT entry fields and try again.');
+    }
+  };
+
+  return (
+    <section className="section-card">
+      <div className="section-heading section-heading-inline">
+        <div className="section-icon section-icon-amber"><Clock3 size={20} /></div>
+        <div><h2>Overtime Management</h2><p>Manage overtime separately from normal sprint allocations.</p></div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <div className="ot-summary-stat"><span>Total OT Hours</span><strong>{num(totalHours)}</strong></div>
+        <div className="ot-summary-stat"><span>Number of OT Entries</span><strong>{entries.length}</strong></div>
+      </div>
+
+      <form className="ot-entry-form" onSubmit={submitEntry}>
+        <label className="field-label">Resource Name
+          <input className="form-control" list={resourceOptionsId} value={entry.resource_name} onChange={(event) => setEntry({ ...entry, resource_name: event.target.value })} placeholder="Select or enter resource" />
+          <datalist id={resourceOptionsId}>{resourceNames.map((name) => <option key={name} value={name} />)}</datalist>
+        </label>
+        <label className="field-label">OT Hours
+          <input className="form-control" type="number" min="0" step="any" value={entry.ot_hours} onChange={(event) => setEntry({ ...entry, ot_hours: event.target.value })} placeholder="Hours" />
+        </label>
+        <label className="field-label">Tenrox Code
+          <input className="form-control" list={tenroxOptionsId} value={entry.tenrox_code} onChange={(event) => setEntry({ ...entry, tenrox_code: event.target.value })} placeholder="Enter Tenrox Code" />
+          <datalist id={tenroxOptionsId}>{tenroxCodes.map((code) => <option key={code} value={code} />)}</datalist>
+        </label>
+        <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white" type="submit"><Plus size={16} /> Add OT Entry</button>
+      </form>
+      {formError && <p className="text-sm font-semibold text-rose-700" role="alert">{formError}</p>}
+
+      <div className="grid-shell">
+        <table className="data-table compact-table">
+          <thead><tr><th>Resource Name</th><th>OT Hours</th><th>Tenrox Code</th><th>Action</th></tr></thead>
+          <tbody>
+            {entries.length === 0 && <tr><td colSpan="4" className="text-center text-graphite">No overtime entries.</td></tr>}
+            {entries.map((row) => <tr key={row.id}>
+              <td>{row.resource_name}</td><td>{num(row.ot_hours)}</td><td>{row.tenrox_code}</td>
+              <td><button type="button" title="Delete OT entry" className="inline-flex h-8 items-center rounded-md border border-rose-200 bg-rose-50 px-2 text-sm font-semibold text-rose-800" onClick={() => deleteOvertimeEntry(row.id)}><Trash2 size={15} /></button></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid-shell">
+        <table className="data-table compact-table">
+          <thead><tr><th>Resource</th><th>Tenrox Code</th><th>Total OT Hours</th><th>Entries</th></tr></thead>
+          <tbody>
+            {grouped.length === 0 && <tr><td colSpan="4" className="text-center text-graphite">OT totals will appear here.</td></tr>}
+            {grouped.map((row) => <tr key={`${row.resource_name}-${row.tenrox_code}`}><td>{row.resource_name}</td><td>{row.tenrox_code}</td><td>{num(row.ot_hours)}</td><td>{row.entry_count}</td></tr>)}
           </tbody>
         </table>
       </div>
@@ -498,7 +591,7 @@ function ImportPanel() {
                 <td>{num(row.story_points)}</td>
                 <td>{row.program}</td>
                 <td>{row.tenrox_code || 'N/A'}</td>
-                <td>{num(row.allocation_percentage ?? row.story_points * 0.1)}</td>
+                <td>{preciseAllocation(row.allocation_percentage ?? row.story_points * 0.1)}</td>
                 <td>{num((row.allocation_percentage ?? row.story_points * 0.1) * dashboard.totals.monthly_hours)}</td>
                 <td>
                   <button title="Delete preview row" className="inline-flex h-8 items-center rounded-md border border-rose-200 bg-rose-50 px-2 text-sm font-semibold text-rose-800" onClick={() => deletePreviewRow(row.id)}>
@@ -520,6 +613,7 @@ function ImportPanel() {
 function App() {
   const { load, loading, dashboard, error, snapshots, saveSnapshot, loadSnapshot } = useRmsStore();
   const [showSnapshots, setShowSnapshots] = useState(false);
+  const [overtimeMode, setOvertimeMode] = useState(false);
 
   useEffect(() => { load(); }, [load]);
 
@@ -558,7 +652,8 @@ function App() {
               </div>
             )}
             <Dashboard />
-            <AllocationGrid />
+            <AllocationGrid overtimeMode={overtimeMode} onOvertimeModeChange={setOvertimeMode} />
+            {overtimeMode && <OvertimeManagement />}
             <ImportPanel />
           </>
         )}

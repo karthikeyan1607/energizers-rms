@@ -8,6 +8,7 @@ export const useRmsStore = create((set, get) => ({
   periods: [],
   config: null,
   previewRows: [],
+  overtimeEntries: [],
   loading: true,
   error: '',
   notice: '',
@@ -16,7 +17,7 @@ export const useRmsStore = create((set, get) => ({
   load: async ({ silent = false } = {}) => {
     set((state) => ({ loading: silent ? state.loading : true, error: '' }));
     try {
-      const [dashboard, resources, programs, periods, config, previewRows, snapshots] = await Promise.all([
+      const [dashboard, resources, programs, periods, config, previewRows, snapshots, overtimeEntries] = await Promise.all([
         api.dashboard(),
         api.resources(),
         api.programs(),
@@ -24,8 +25,9 @@ export const useRmsStore = create((set, get) => ({
         api.config(),
         api.preview(),
         api.listSnapshots(),
+        api.overtimeEntries(),
       ]);
-      set({ dashboard, resources, programs, periods, config, previewRows, snapshots, loading: false });
+      set({ dashboard, resources, programs, periods, config, previewRows, snapshots, overtimeEntries, loading: false });
     } catch (error) {
       set({ error: error.message, loading: false });
     }
@@ -120,6 +122,17 @@ export const useRmsStore = create((set, get) => ({
 
   clearCurrentPlanning: async () => {
     await get().runAction(() => api.clearCurrentPlanning(), { notice: 'Current planning cleared.' });
+    await get().load({ silent: true });
+  },
+
+  addOvertimeEntry: async (body) => {
+    const entry = await get().runAction(() => api.addOvertimeEntry(body), { notice: 'OT entry added.' });
+    await get().load({ silent: true });
+    return entry;
+  },
+
+  deleteOvertimeEntry: async (id) => {
+    await get().runAction(() => api.deleteOvertimeEntry(id), { notice: 'OT entry deleted.' });
     await get().load({ silent: true });
   },
 
